@@ -37,7 +37,7 @@ const Editor = () => {
   const [title, setTitle] = useState('Untitled Design');
   const [sidePanel, setSidePanel] = useState('properties'); // 'properties' | 'layers'
   const autoSaveTimer = useRef(null);
-
+//ykn
   // Load design and init canvas
   useEffect(() => {
     console.log('Editor loaded with id:', id);

@@ -87,7 +87,7 @@ const Dashboard = () => {
           <div className="w-8 h-8 bg-accent rounded-lg flex items-center justify-center">
             <Layers size={16} />
           </div>
-          <span className="font-bold text-lg tracking-tight">DesignForge</span>
+          <span className="font-bold text-lg tracking-tight">Synapes</span>
         </div>
 
         <div className="flex-1 max-w-md mx-8">
