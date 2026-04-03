@@ -8,7 +8,7 @@ import {
   Minus, Image as ImageIcon, Move, MousePointer, Triangle,
   Bold, Italic, AlignLeft, AlignCenter, AlignRight,
   ZoomIn, ZoomOut, RotateCcw, Layers, Lock, Copy,
-  ChevronUp, ChevronDown, Pencil
+  ChevronUp, ChevronDown, Pencil, Sparkles, Send
 } from 'lucide-react';
 
 const COLORS = [
@@ -35,8 +35,10 @@ const Editor = () => {
   const [isDrawing, setIsDrawing] = useState(false);
   const titleRef = useRef(null);
   const [title, setTitle] = useState('Untitled Design');
-  const [sidePanel, setSidePanel] = useState('properties'); // 'properties' | 'layers'
+  const [sidePanel, setSidePanel] = useState('properties'); // 'properties' | 'layers' | 'ai'
   const autoSaveTimer = useRef(null);
+  const [aiPrompt, setAiPrompt] = useState('');
+  const [aiGenerating, setAiGenerating] = useState(false);
 //ykn
   // Load design and init canvas
   useEffect(() => {
@@ -249,6 +251,49 @@ const Editor = () => {
     }, { crossOrigin: 'anonymous' });
   };
 
+  const generateWithAI = async () => {
+    if (!aiPrompt.trim() || !fabricRef.current || !design) return;
+    setAiGenerating(true);
+    try {
+      const { data } = await api.post('/agent/generate', {
+        prompt: aiPrompt,
+        canvasWidth: design.width,
+        canvasHeight: design.height,
+      });
+      const objects = data.objects || [];
+      if (!objects.length) {
+        toast('AI returned no objects for that prompt.', { icon: '🤖' });
+        return;
+      }
+      objects.forEach((objDef) => {
+        let obj;
+        const { type, ...props } = objDef;
+        if (type === 'rect') {
+          obj = new fabric.Rect(props);
+        } else if (type === 'circle') {
+          obj = new fabric.Circle(props);
+        } else if (type === 'triangle') {
+          obj = new fabric.Triangle(props);
+        } else if (type === 'i-text' || type === 'text') {
+          obj = new fabric.IText(props.text || 'Text', { ...props, editable: true });
+        } else if (type === 'line') {
+          const { x1 = 0, y1 = 0, x2 = 100, y2 = 0, ...lineProps } = props;
+          obj = new fabric.Line([x1, y1, x2, y2], lineProps);
+        }
+        if (obj) fabricRef.current.add(obj);
+      });
+      fabricRef.current.renderAll();
+      scheduleAutoSave();
+      toast.success(`AI added ${objects.length} object${objects.length > 1 ? 's' : ''} to the canvas`);
+      setAiPrompt('');
+    } catch (error) {
+      const msg = error.response?.data?.message || 'AI generation failed';
+      toast.error(msg);
+    } finally {
+      setAiGenerating(false);
+    }
+  };
+
   const enableDrawing = () => {
     if (!fabricRef.current) return;
     const on = !fabricRef.current.isDrawingMode;
@@ -394,10 +439,10 @@ const Editor = () => {
         <aside className="w-64 bg-dark-800 border-l border-dark-600 flex flex-col shrink-0 overflow-hidden">
           {/* Panel Tabs */}
           <div className="flex border-b border-dark-600">
-            {['properties', 'layers'].map(p => (
+            {['properties', 'layers', 'ai'].map(p => (
               <button key={p} onClick={() => setSidePanel(p)}
                 className={`flex-1 py-2.5 text-xs font-semibold capitalize transition-colors ${sidePanel === p ? 'text-white border-b-2 border-accent' : 'text-gray-500 hover:text-gray-300'}`}>
-                {p}
+                {p === 'ai' ? <span className="flex items-center justify-center gap-1"><Sparkles size={11} />AI</span> : p}
               </button>
             ))}
           </div>
@@ -492,7 +537,7 @@ const Editor = () => {
                     className="w-full h-9 rounded-lg cursor-pointer bg-dark-700 border border-dark-500 p-1" />
                 </div>
               </>
-            ) : (
+            ) : sidePanel === 'layers' ? (
               /* Layers Panel */
               <div>
                 <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
@@ -517,6 +562,42 @@ const Editor = () => {
                     ))}
                   </div>
                 )}
+              </div>
+            ) : (
+              /* AI Agent Panel */
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <Sparkles size={14} className="text-accent" />
+                  <p className="text-xs font-semibold text-gray-300 uppercase tracking-wider">AI Assistant</p>
+                </div>
+                <p className="text-xs text-gray-500 leading-relaxed">
+                  Describe what you want to add to the canvas and the AI will generate the design elements for you.
+                </p>
+                <textarea
+                  value={aiPrompt}
+                  onChange={e => setAiPrompt(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); generateWithAI(); } }}
+                  placeholder="e.g. Add a blue rounded rectangle in the center with white text saying 'Hello World'"
+                  rows={5}
+                  className="w-full bg-dark-700 border border-dark-500 rounded-lg px-3 py-2 text-xs text-white placeholder-gray-600 focus:outline-none focus:border-accent resize-none"
+                />
+                <button
+                  onClick={generateWithAI}
+                  disabled={aiGenerating || !aiPrompt.trim()}
+                  className="w-full btn-primary text-xs py-2 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {aiGenerating ? (
+                    <>
+                      <span className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin" />
+                      Generating...
+                    </>
+                  ) : (
+                    <>
+                      <Send size={12} /> Generate
+                    </>
+                  )}
+                </button>
+                <p className="text-[10px] text-gray-600 text-center">Ctrl+Enter to generate</p>
               </div>
             )}
           </div>

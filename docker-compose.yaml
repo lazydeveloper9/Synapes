@@ -5,6 +5,7 @@ services:
       dockerfile: Dockerfile.yaml
     environment:
       MONGO_URI: mongodb://mongo:27017/synapes
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
     ports:
       - "5000:5000"
     depends_on:

@@ -6,6 +6,7 @@ require('dotenv').config();
 
 const authRoutes = require('./routes/auth');
 const designRoutes = require('./routes/designs');
+const agentRoutes = require('./routes/agent');
 
 const app = express();
 
@@ -29,6 +30,7 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/designs', designRoutes);
+app.use('/api/agent', agentRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => res.json({ status: 'OK', message: 'DesignForge API running' }));
