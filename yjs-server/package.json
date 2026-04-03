@@ -1,0 +1,11 @@
+{
+  "name": "yjs-server",
+  "version": "1.0.0",
+  "description": "Yjs WebSocket server for Synapes real-time collaboration",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "y-websocket": "^2.1.0"
+  }
+}

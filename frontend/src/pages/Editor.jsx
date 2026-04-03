@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import * as fabric from 'fabric';
+import * as Y from 'yjs';
+import { WebsocketProvider } from 'y-websocket';
 import api from '../api/axios';
 import toast from 'react-hot-toast';
 import {
@@ -8,8 +10,10 @@ import {
   Minus, Image as ImageIcon, Move, MousePointer, Triangle,
   Bold, Italic, AlignLeft, AlignCenter, AlignRight,
   ZoomIn, ZoomOut, RotateCcw, Layers, Lock, Copy,
-  ChevronUp, ChevronDown, Pencil
+  ChevronUp, ChevronDown, Pencil, Users
 } from 'lucide-react';
+
+const YJS_SERVER = import.meta.env.VITE_YJS_SERVER || 'ws://localhost:1234';
 
 const COLORS = [
   '#ffffff','#000000','#ef4444','#f97316','#eab308',
@@ -36,15 +40,25 @@ const Editor = () => {
   const titleRef = useRef(null);
   const [title, setTitle] = useState('Untitled Design');
   const [sidePanel, setSidePanel] = useState('properties'); // 'properties' | 'layers'
+  const [peers, setPeers] = useState(0);
+  const [syncStatus, setSyncStatus] = useState('connecting'); // 'connecting' | 'connected' | 'disconnected'
   const autoSaveTimer = useRef(null);
-//ykn
-  // Load design and init canvas
+  const ydocRef = useRef(null);
+  const yproviderRef = useRef(null);
+  const ycanvasRef = useRef(null); // Y.Map holding canvas state
+  const applyingRemote = useRef(false); // guard against echo updates
+  const broadcastTimer = useRef(null); // debounce timer for broadcasts
+
+  // Load design, init canvas, and connect Yjs
   useEffect(() => {
     console.log('Editor loaded with id:', id);
     loadDesign();
     return () => {
       if (fabricRef.current) fabricRef.current.dispose();
       clearTimeout(autoSaveTimer.current);
+      if (yproviderRef.current) yproviderRef.current.destroy();
+      if (ydocRef.current) ydocRef.current.destroy();
+      clearTimeout(broadcastTimer.current);
     };
   }, [id]);
 
@@ -56,6 +70,7 @@ const Editor = () => {
       setDesign(data.design);
       setTitle(data.design.title);
       initCanvas(data.design);
+      setupYjs(data.design);
     } catch (error) {
       console.error('Load design error:', error);
       toast.error('Failed to load design');
@@ -97,8 +112,9 @@ const Editor = () => {
     canvas.on('selection:created', e => setActiveObj(e.selected?.[0] || null));
     canvas.on('selection:updated', e => setActiveObj(e.selected?.[0] || null));
     canvas.on('selection:cleared', () => setActiveObj(null));
-    canvas.on('object:modified', scheduleAutoSave);
-    canvas.on('object:added', scheduleAutoSave);
+    canvas.on('object:modified', () => { broadcastCanvas(); scheduleAutoSave(); });
+    canvas.on('object:added', () => { broadcastCanvas(); scheduleAutoSave(); });
+    canvas.on('object:removed', () => { broadcastCanvas(); scheduleAutoSave(); });
 
     // Scale canvas to fit viewport
     fitCanvas(canvas, baseWidth, baseHeight);
@@ -150,6 +166,61 @@ const Editor = () => {
   const scheduleAutoSave = () => {
     clearTimeout(autoSaveTimer.current);
     autoSaveTimer.current = setTimeout(() => saveDesign(true), 3000);
+  };
+
+  // Broadcast local canvas state to all Yjs peers (debounced to 500 ms)
+  const broadcastCanvas = () => {
+    if (!fabricRef.current || !ycanvasRef.current || applyingRemote.current) return;
+    clearTimeout(broadcastTimer.current);
+    broadcastTimer.current = setTimeout(() => {
+      if (!fabricRef.current || !ycanvasRef.current || applyingRemote.current) return;
+      const json = JSON.stringify(fabricRef.current.toJSON());
+      ydocRef.current.transact(() => {
+        ycanvasRef.current.set('state', json);
+      });
+    }, 500);
+  };
+
+  // Set up Yjs document + WebSocket provider for real-time sync
+  const setupYjs = (_design) => {
+    // Clean up previous instance if any
+    if (yproviderRef.current) yproviderRef.current.destroy();
+    if (ydocRef.current) ydocRef.current.destroy();
+
+    const ydoc = new Y.Doc();
+    ydocRef.current = ydoc;
+
+    const ycanvas = ydoc.getMap('canvas');
+    ycanvasRef.current = ycanvas;
+
+    const provider = new WebsocketProvider(YJS_SERVER, `synapes-design-${id}`, ydoc);
+    yproviderRef.current = provider;
+
+    provider.on('status', ({ status }) => {
+      setSyncStatus(status === 'connected' ? 'connected' : status === 'connecting' ? 'connecting' : 'disconnected');
+    });
+
+    provider.awareness.on('change', () => {
+      const states = provider.awareness.getStates();
+      setPeers(states.size - 1); // exclude self
+    });
+
+    // Observe remote canvas state changes and apply to local Fabric canvas
+    ycanvas.observe((event) => {
+      if (event.transaction.local) return; // skip own updates
+      const remoteJson = ycanvas.get('state');
+      if (!remoteJson || !fabricRef.current) return;
+      applyingRemote.current = true;
+      try {
+        fabricRef.current.loadFromJSON(remoteJson, () => {
+          fabricRef.current.renderAll();
+          applyingRemote.current = false;
+        });
+      } catch (err) {
+        console.error('Failed to apply remote canvas update:', err);
+        applyingRemote.current = false;
+      }
+    });
   };
 
   const saveDesign = async (auto = true) => {
@@ -334,6 +405,13 @@ const Editor = () => {
         />
 
         <div className="flex-1" />
+
+        {/* Collaboration status */}
+        <div className="flex items-center gap-1.5 text-xs px-2 py-1 rounded-lg bg-dark-700">
+          <span className={`w-2 h-2 rounded-full ${syncStatus === 'connected' ? 'bg-green-400' : syncStatus === 'connecting' ? 'bg-yellow-400 animate-pulse' : 'bg-red-400'}`} />
+          <Users size={12} className="text-gray-400" />
+          <span className="text-gray-300">{peers > 0 ? `${peers} other${peers === 1 ? '' : 's'}` : 'Just you'}</span>
+        </div>
 
         {/* Zoom */}
         <div className="flex items-center gap-1 bg-dark-700 rounded-lg px-2 py-1">
