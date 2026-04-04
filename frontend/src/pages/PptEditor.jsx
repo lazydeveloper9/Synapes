@@ -5,8 +5,9 @@ import * as fabric from 'fabric';
 import toast from 'react-hot-toast';
 import {
   ArrowLeft, Plus, Trash2, Save, Download, ChevronLeft, ChevronRight,
-  Type, Square, Circle, Minus, Play,
+  Type, Square, Circle, Minus, Play, Share2, Check,
 } from 'lucide-react';
+import { useNotify, NotificationBell } from '../components/NotificationSystem';
 
 /* ─── helpers ─────────────────────────────────────────────────────────────── */
 const STORAGE_KEY = 'synapse_slides';
@@ -46,6 +47,8 @@ export default function PptEditor() {
   const [activeSlide, setActiveSlide] = useState(0);
   const [themeIdx,   setThemeIdx]   = useState(0);
   const [presenting, setPresenting] = useState(false);
+  const [copied,     setCopied]     = useState(false);
+  const { notifyOpen } = useNotify();
 
   const theme = THEMES[themeIdx];
 
@@ -112,6 +115,7 @@ export default function PptEditor() {
     savePresent(updated);
   };
 
+  const openPresentation = (p) => { notifyOpen('slides', p.name); setActivePresId(p.id); };
   const createPresentation = () => {
     const firstSlide = newSlide(themeIdx);
     const p = { id: Date.now().toString(), name: 'Untitled Presentation', slides: [firstSlide], themeIdx: 0, updatedAt: Date.now() };
@@ -214,6 +218,12 @@ export default function PptEditor() {
             <button onClick={()=>persistCurrent(false)} className="btn-primary text-xs px-3 py-1.5 h-8"><Save size={13}/> Save</button>
           </>
         )}
+        {activePresId && (
+          <button onClick={()=>{ const url=`${window.location.origin}/slides`; navigator.clipboard.writeText(url).catch(()=>{}); setCopied(true); setTimeout(()=>setCopied(false),2000); }} className="btn-secondary text-xs px-3 py-1.5 h-8" style={{color:copied?'#22c55e':undefined}}>
+            {copied?<Check size={13}/>:<Share2 size={13}/>} {copied?'Copied!':'Share'}
+          </button>
+        )}
+        <NotificationBell />
         <button onClick={logout} className="text-gray-500 hover:text-red-400 text-xs ml-2">Sign out</button>
       </nav>
 
@@ -226,7 +236,7 @@ export default function PptEditor() {
           </div>
           <div className="flex-1 overflow-y-auto p-2">
             {pres.map(p => (
-              <div key={p.id} onClick={()=>setActivePresId(p.id)}
+              <div key={p.id} onClick={()=>openPresentation(p)}
                 className={`p-2.5 rounded-lg cursor-pointer mb-1 group flex items-center gap-2 transition-colors ${activePresId===p.id?'bg-dark-600 border border-accent/30':'hover:bg-dark-700'}`}>
                 <span className="text-base">🖥️</span>
                 <span className="text-xs font-medium text-white truncate flex-1">{p.name}</span>

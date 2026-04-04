@@ -2,7 +2,8 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
-import { ArrowLeft, Plus, Trash2, Save, Download, Search } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Save, Download, Search, Share2, Check } from 'lucide-react';
+import { useNotify, NotificationBell } from '../components/NotificationSystem';
 
 /* ─── constants ─────────────────────────────────────────────────────────── */
 const ROWS = 30;
@@ -68,6 +69,8 @@ export default function ExcelEditor() {
   const autoRef = useRef(null);
 
   const [sheets,   setSheets]   = useState(loadSheets);
+  const [copied,   setCopied]   = useState(false);
+  const { notifyOpen } = useNotify();
   const [activeId, setActiveId] = useState(null);
   const [sel,      setSel]      = useState({ r: 0, c: 0 });
   const [editing,  setEditing]  = useState(false);
@@ -140,6 +143,7 @@ export default function ExcelEditor() {
     toast.success('Exported as CSV!');
   };
 
+  const openSheet = (s) => { notifyOpen('sheets', s.name); setActiveId(s.id); };
   const filteredSheets = sheets.filter(s => s.name.toLowerCase().includes(search.toLowerCase()));
 
   return (
@@ -154,9 +158,13 @@ export default function ExcelEditor() {
         {sheet && (
           <>
             <button onClick={exportCSV}          className="btn-secondary text-xs px-3 py-1.5 h-8"><Download size={13}/> CSV</button>
+            <button onClick={() => { const url=`${window.location.origin}/sheets`; navigator.clipboard.writeText(url).catch(()=>{}); setCopied(true); setTimeout(()=>setCopied(false),2000); }} className="btn-secondary text-xs px-3 py-1.5 h-8" style={{color:copied?'#22c55e':undefined}}>
+              {copied?<Check size={13}/>:<Share2 size={13}/>} {copied?'Copied!':'Share'}
+            </button>
             <button onClick={() => persist(false)} className="btn-primary text-xs px-3 py-1.5 h-8"><Save size={13}/> Save</button>
           </>
         )}
+        <NotificationBell />
         <button onClick={logout} className="text-gray-500 hover:text-red-400 text-xs ml-2">Sign out</button>
       </nav>
 
@@ -179,7 +187,7 @@ export default function ExcelEditor() {
                   <button onClick={createSheet} className="mt-2 text-accent hover:underline">Create one →</button>
                 </div>
               : filteredSheets.map(s => (
-                <div key={s.id} onClick={()=>setActiveId(s.id)}
+                <div key={s.id} onClick={()=>openSheet(s)}
                   className={`p-2.5 rounded-lg cursor-pointer mb-1 group flex items-center justify-between transition-colors ${activeId===s.id?'bg-dark-600 border border-accent/30':'hover:bg-dark-700'}`}>
                   <span className="text-xs font-medium text-white truncate">📊 {s.name}</span>
                   <button onClick={e=>deleteSheet(s.id,e)} className="opacity-0 group-hover:opacity-100 p-0.5 text-gray-600 hover:text-red-400">

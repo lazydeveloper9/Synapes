@@ -7,6 +7,10 @@ require('dotenv').config();
 const authRoutes   = require('./routes/auth');
 const designRoutes = require('./routes/designs');
 const chatRoutes   = require('./routes/chat');
+<<<<<<< HEAD
+=======
+const aiRoutes     = require('./routes/ai');        // ← AI Vision + Generation
+>>>>>>> b76ec217ca13dba3414992b21aa0db071dadc9db
 
 const app = express();
 const prisma = new PrismaClient(); // Initialize Prisma
@@ -19,7 +23,12 @@ app.use(express.json());
 // 3. YOUR ROUTES GO AFTER
 app.use('/api/auth', authRoutes);
 app.use('/api/designs', designRoutes);
+<<<<<<< HEAD
 app.use('/api/chat', chatRoutes);
+=======
+app.use('/api/chat',    chatRoutes);
+app.use('/api/ai',      aiRoutes);                 // ← AI Vision + Generation
+>>>>>>> b76ec217ca13dba3414992b21aa0db071dadc9db
 
 app.get('/api/health', async (req, res) => {
   try {

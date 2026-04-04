@@ -5,8 +5,9 @@ import toast from 'react-hot-toast';
 import {
   ArrowLeft, Plus, Trash2, Save, Download, FileText,
   Bold, Italic, Underline, AlignLeft, AlignCenter, AlignRight,
-  List, Type, Search,
+  List, Type, Search, Share2, Check,
 } from 'lucide-react';
+import { useNotify, NotificationBell } from '../components/NotificationSystem';
 
 /* ─── helpers ─────────────────────────────────────────────────────────────── */
 const STORAGE_KEY = 'synapse_docs';
@@ -41,6 +42,8 @@ export default function DocsEditor() {
   const [search,     setSearch]     = useState('');
   const [title,      setTitle]      = useState('');
   const [wordCount,  setWordCount]  = useState(0);
+  const [copied,     setCopied]     = useState(false);
+  const { notifyOpen } = useNotify();
 
   const activeDoc = docs.find(d => d.id === activeId);
 
@@ -91,6 +94,7 @@ export default function DocsEditor() {
   };
 
   const openDoc = (d) => {
+    notifyOpen('docs', d.title);
     // save current before switching
     if (activeId && editorRef.current) {
       const content = editorRef.current.innerHTML;
@@ -143,8 +147,22 @@ export default function DocsEditor() {
             <button onClick={exportTXT}  className="btn-secondary text-xs px-3 py-1.5 h-8"><Download size={13}/> TXT</button>
             <button onClick={exportDOC}  className="btn-secondary text-xs px-3 py-1.5 h-8"><FileText size={13}/> DOC</button>
             <button onClick={() => persist(false)} className="btn-primary text-xs px-3 py-1.5 h-8"><Save size={13}/> Save</button>
+            {activeDoc && (
+              <button onClick={() => {
+                const url = `${window.location.origin}/docs`;
+                navigator.clipboard.writeText(url).catch(()=>{});
+                setCopied(true); setTimeout(()=>setCopied(false),2000);
+                if(typeof toast !== 'undefined') toast.success('Link copied!');
+              }}
+                className="btn-secondary text-xs px-3 py-1.5 h-8"
+                style={{ color: copied ? '#22c55e' : undefined }}
+              >
+                {copied ? <Check size={13}/> : <Share2 size={13}/>} {copied ? 'Copied!' : 'Share'}
+              </button>
+            )}
           </>
         )}
+        <NotificationBell />
         <button onClick={logout} className="text-gray-500 hover:text-red-400 text-xs ml-2">Sign out</button>
       </nav>
 
