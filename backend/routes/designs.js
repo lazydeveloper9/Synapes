@@ -4,7 +4,6 @@ const { protect } = require('../middleware/auth');
 
 const router = express.Router();
 
-// All routes protected
 router.use(protect);
 
 // GET all designs for user
