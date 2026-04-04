@@ -3,6 +3,7 @@ import { Toaster } from 'react-hot-toast';
 import { AuthProvider } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import { NotificationProvider } from './components/NotificationSystem';
+import OfflineGame from './components/OfflineGame';
 
 // Pages
 import Landing      from './pages/Landing';
@@ -28,6 +29,7 @@ export default function App() {
               success: { iconTheme: { primary: '#6366f1', secondary: '#fff' } },
             }}
           />
+          <OfflineGame />
           <Routes>
             {/* Public */}
             <Route path="/"         element={<Landing />} />

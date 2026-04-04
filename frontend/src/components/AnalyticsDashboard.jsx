@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Users, Clock, MousePointer, TrendingUp, Eye, Activity, BarChart2 } from 'lucide-react';
 
+// ─── Deterministic "random" from string seed ─────────────────────────────────
 const seededRand = (seed, min, max) => {
   let h = 0;
   for (let i = 0; i < seed.length; i++) h = (Math.imul(31, h) + seed.charCodeAt(i)) | 0;
@@ -9,7 +10,7 @@ const seededRand = (seed, min, max) => {
   return val;
 };
 
-
+// ─── Mini Sparkline ───────────────────────────────────────────────────────────
 const Sparkline = ({ data, color = '#6366f1', height = 40 }) => {
   const max = Math.max(...data);
   const min = Math.min(...data);
@@ -34,6 +35,7 @@ const Sparkline = ({ data, color = '#6366f1', height = 40 }) => {
   );
 };
 
+// ─── Animated Counter ─────────────────────────────────────────────────────────
 const Counter = ({ value, suffix = '' }) => {
   const [count, setCount] = useState(0);
   useEffect(() => {
@@ -51,6 +53,7 @@ const Counter = ({ value, suffix = '' }) => {
   return <span>{count.toLocaleString()}{suffix}</span>;
 };
 
+// ─── Radial Progress ──────────────────────────────────────────────────────────
 const RadialProgress = ({ value, color = '#6366f1', size = 80 }) => {
   const r = (size - 10) / 2;
   const circ = 2 * Math.PI * r;
@@ -71,11 +74,11 @@ const RadialProgress = ({ value, color = '#6366f1', size = 80 }) => {
   );
 };
 
-
+// ─── AnalyticsDashboard ───────────────────────────────────────────────────────
 const AnalyticsDashboard = ({ design, onClose }) => {
   const id = design._id;
 
- 
+  // Deterministic "live" data seeded from design ID
   const views      = seededRand(id + 'v', 120, 3800);
   const users      = seededRand(id + 'u', 8, 240);
   const sessions   = seededRand(id + 's', 30, 600);
@@ -84,12 +87,12 @@ const AnalyticsDashboard = ({ design, onClose }) => {
   const retention  = seededRand(id + 'r', 45, 92);
   const edits      = seededRand(id + 'e', 50, 1200);
 
-
+  // Sparkline data
   const viewData  = Array.from({ length: 7 }, (_, i) => seededRand(id + 'vd' + i, 30, views));
   const userDatum = Array.from({ length: 7 }, (_, i) => seededRand(id + 'ud' + i, 2, users));
   const days      = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
-  
+  // Bar chart data (hourly distribution)
   const hourlyMax = seededRand(id + 'hm', 40, 100);
   const hourly    = Array.from({ length: 24 }, (_, i) => {
     const base = i >= 9 && i <= 18 ? 60 : i >= 6 && i <= 22 ? 30 : 10;

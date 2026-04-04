@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MessageCircle, X, Send, Loader2, ArrowRight, Sparkles } from 'lucide-react';
 
-
+// ─── Quick Questions ──────────────────────────────────────────────────────────
 const QUICK_QUESTIONS = [
   { label: '✨ What is Synapse?',          message: 'What is Synapse and what can I do with it?', redirect: null },
   { label: '🎨 How does the editor work?', message: 'How does the Synapse canvas editor work?',   redirect: null },
@@ -18,6 +18,7 @@ Key features: Vector Canvas, Auto Save, PNG Export, Templates (Presentation, Soc
 Keep answers concise (2-4 sentences). Be enthusiastic about design. If asked about pricing, it's always free. 
 For technical questions about the app, explain clearly. Always end with an encouraging call to action.`;
 
+// ─── Message Bubble ───────────────────────────────────────────────────────────
 const MessageBubble = ({ msg }) => (
   <motion.div
     initial={{ opacity: 0, y: 10, scale: 0.97 }}
