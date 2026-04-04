@@ -59,6 +59,11 @@ io.on('connection', (socket) => {
     // Send current room state to new joiner
     socket.emit('room-state', { users: getUserList(roomId), data: rooms.get(roomId).data });
     broadcastUsers(roomId);
+    // Send existing comments to the new joiner
+    const existingComments = rooms.get(roomId)?.data?.comments || [];
+    if (existingComments.length > 0) {
+      socket.emit('room-comments-sync', { comments: existingComments });
+    }
   });
 
   /* ── Sheet: cell focus ── */
@@ -101,6 +106,39 @@ io.on('connection', (socket) => {
   socket.on('room-chat', ({ text }) => {
     if (!currentRoom || !userInfo) return;
     io.to(currentRoom).emit('room-chat-msg', { user: userInfo, text, ts: Date.now() });
+  });
+
+  /* ── Voice / text comment sync ── */
+  socket.on('add-voice-comment', ({ roomId, comment }) => {
+    if (!roomId || !comment) return;
+    // Broadcast to all OTHER users in the room
+    socket.to(roomId).emit('voice-comment-added', comment);
+    // Persist in room data so late joiners get it
+    const room = rooms.get(roomId);
+    if (room) {
+      if (!room.data.comments) room.data.comments = [];
+      room.data.comments.push(comment);
+      // Keep only last 200 comments to avoid memory bloat
+      if (room.data.comments.length > 200) room.data.comments = room.data.comments.slice(-200);
+    }
+  });
+
+  socket.on('resolve-voice-comment', ({ roomId, cid }) => {
+    if (!roomId) return;
+    socket.to(roomId).emit('voice-comment-resolved', { cid });
+    const room = rooms.get(roomId);
+    if (room && room.data.comments) {
+      room.data.comments = room.data.comments.map(c => c.id === cid ? { ...c, resolved: true } : c);
+    }
+  });
+
+  socket.on('delete-voice-comment', ({ roomId, cid }) => {
+    if (!roomId) return;
+    socket.to(roomId).emit('voice-comment-deleted', { cid });
+    const room = rooms.get(roomId);
+    if (room && room.data.comments) {
+      room.data.comments = room.data.comments.filter(c => c.id !== cid);
+    }
   });
 
   /* ── Disconnect ── */

@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import * as fabric from 'fabric';
 import api from '../api/axios';
 import toast from 'react-hot-toast';
+import { io } from 'socket.io-client';
 import {
   ArrowLeft, Save, Download, Trash2, Type, Square, Circle,
   Minus, Image as ImageIcon, MousePointer, Triangle,
@@ -12,6 +13,7 @@ import {
   MessageSquarePlus, X, Lock, Unlock, Eye, EyeOff,
   FlipHorizontal, FlipVertical, RotateCcw, Grid,
   MoveUp, MoveDown, ArrowUpToLine, ArrowDownToLine,
+  Mic, MicOff, Play, Square as StopIcon, Volume2, Trash,
 } from 'lucide-react';
 
 const COLORS = ['#ffffff','#000000','#ef4444','#f97316','#eab308','#22c55e','#3b82f6','#8b5cf6','#ec4899','#14b8a6','#f1f5f9','#94a3b8','#64748b','#334155','#0f172a'];
@@ -84,12 +86,108 @@ const ExportDropdown=({onExport})=>{
   );
 };
 
+/* ─── Voice Recorder Hook ──────────────────────────────────────────────────── */
+function useVoiceRecorder() {
+  const [recording, setRecording] = useState(false);
+  const [audioBlob, setAudioBlob] = useState(null);
+  const [audioUrl, setAudioUrl] = useState(null);
+  const [duration, setDuration] = useState(0);
+  const mediaRecorderRef = useRef(null);
+  const chunksRef = useRef([]);
+  const timerRef = useRef(null);
+
+  const startRecording = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+        ? 'audio/webm;codecs=opus'
+        : MediaRecorder.isTypeSupported('audio/webm')
+        ? 'audio/webm'
+        : 'audio/ogg';
+      const mr = new MediaRecorder(stream, { mimeType });
+      mediaRecorderRef.current = mr;
+      chunksRef.current = [];
+      mr.ondataavailable = e => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+      mr.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: mimeType });
+        const url = URL.createObjectURL(blob);
+        setAudioBlob(blob);
+        setAudioUrl(url);
+        stream.getTracks().forEach(t => t.stop());
+      };
+      mr.start(100);
+      setRecording(true);
+      setDuration(0);
+      timerRef.current = setInterval(() => setDuration(d => d + 1), 1000);
+    } catch (err) {
+      toast.error('Microphone access denied. Please allow mic permissions.');
+    }
+  }, []);
+
+  const stopRecording = useCallback(() => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+    }
+    clearInterval(timerRef.current);
+    setRecording(false);
+  }, []);
+
+  const clearAudio = useCallback(() => {
+    if (audioUrl) URL.revokeObjectURL(audioUrl);
+    setAudioBlob(null);
+    setAudioUrl(null);
+    setDuration(0);
+  }, [audioUrl]);
+
+  useEffect(() => () => { clearInterval(timerRef.current); }, []);
+
+  return { recording, audioBlob, audioUrl, duration, startRecording, stopRecording, clearAudio };
+}
+
+/* ─── Audio Player ─────────────────────────────────────────────────────────── */
+function AudioPlayer({ url, duration }) {
+  const audioRef = useRef(null);
+  const [playing, setPlaying] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [currentTime, setCurrent] = useState(0);
+  const [audioDur, setAudioDur] = useState(duration || 0);
+
+  const toggle = () => {
+    if (!audioRef.current) return;
+    if (playing) { audioRef.current.pause(); } else { audioRef.current.play(); }
+    setPlaying(p => !p);
+  };
+
+  const fmt = s => `${Math.floor(s/60)}:${String(Math.floor(s%60)).padStart(2,'0')}`;
+
+  return (
+    <div style={{display:'flex',alignItems:'center',gap:8,background:'rgba(99,102,241,0.1)',border:'1px solid rgba(99,102,241,0.25)',borderRadius:10,padding:'6px 10px',minWidth:200}}>
+      <audio ref={audioRef} src={url} preload="metadata"
+        onLoadedMetadata={e => setAudioDur(e.target.duration)}
+        onTimeUpdate={e => { setCurrent(e.target.currentTime); setProgress(e.target.currentTime/(e.target.duration||1)*100); }}
+        onEnded={() => { setPlaying(false); setProgress(0); setCurrent(0); }}
+      />
+      <button onClick={toggle} style={{background:'#6366f1',border:'none',borderRadius:'50%',width:28,height:28,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}}>
+        {playing ? <StopIcon size={12} color="#fff"/> : <Play size={12} color="#fff"/>}
+      </button>
+      <div style={{flex:1}}>
+        <div style={{height:4,background:'rgba(255,255,255,0.1)',borderRadius:2,cursor:'pointer',overflow:'hidden'}}
+          onClick={e=>{if(!audioRef.current)return;const r=e.currentTarget.getBoundingClientRect();const pct=(e.clientX-r.left)/r.width;audioRef.current.currentTime=pct*(audioRef.current.duration||0);}}>
+          <div style={{height:'100%',background:'#6366f1',borderRadius:2,width:`${progress}%`,transition:'width .1s linear'}}/>
+        </div>
+        <p style={{fontSize:9,color:'#666',marginTop:2}}>{fmt(currentTime)} / {fmt(audioDur)}</p>
+      </div>
+      <Volume2 size={12} color="#6366f1"/>
+    </div>
+  );
+}
+
 /* ─── Comment Pin ──────────────────────────────────────────────────────────── */
 const CommentPin=({comment,onClick})=>(
-  <div onClick={()=>onClick(comment)} title={comment.text} style={{position:'absolute',left:comment.x,top:comment.y,width:26,height:26,borderRadius:'50% 50% 50% 0',background:'#6366f1',border:'2px solid #fff',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',transform:'rotate(-45deg)',zIndex:100,boxShadow:'0 2px 8px rgba(0,0,0,.5)',transition:'transform .15s',fontSize:10}}
+  <div onClick={()=>onClick(comment)} title={comment.text||'Voice note'} style={{position:'absolute',left:comment.x,top:comment.y,width:26,height:26,borderRadius:'50% 50% 50% 0',background:comment.audioData?'#ec4899':'#6366f1',border:'2px solid #fff',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',transform:'rotate(-45deg)',zIndex:100,boxShadow:'0 2px 8px rgba(0,0,0,.5)',transition:'transform .15s',fontSize:10}}
     onMouseEnter={e=>e.currentTarget.style.transform='rotate(-45deg) scale(1.25)'}
     onMouseLeave={e=>e.currentTarget.style.transform='rotate(-45deg) scale(1)'}
-  ><span style={{transform:'rotate(45deg)'}}>💬</span></div>
+  ><span style={{transform:'rotate(45deg)'}}>{comment.audioData?'🎙️':'💬'}</span></div>
 );
 
 /* ─── Editor ───────────────────────────────────────────────────────────────── */
@@ -98,6 +196,9 @@ const Editor=()=>{
   const canvasRef=useRef(null); const fabricRef=useRef(null);
   const wrapperRef=useRef(null); const designRef=useRef(null);
   const autoSaveTimer=useRef(null); const commentInputRef=useRef(null);
+  const socketRef=useRef(null);
+  const { recording, audioBlob, audioUrl, duration, startRecording, stopRecording, clearAudio } = useVoiceRecorder();
+  const [commentTab, setCommentTab] = useState('text');
 
   const [design,setDesign]=useState(null);
   const [activeTool,setActiveTool]=useState('select');
@@ -159,7 +260,34 @@ const Editor=()=>{
 
   useEffect(()=>{
     loadDesign();
-    return()=>{if(fabricRef.current)fabricRef.current.dispose();clearTimeout(autoSaveTimer.current)};
+    // Connect socket for real-time voice comment sync
+    const socket = io(import.meta.env.VITE_API_URL?.replace('/api','') || 'http://localhost:5000');
+    socketRef.current = socket;
+    socket.on('voice-comment-added', (comment) => {
+      setComments(prev => {
+        if (prev.find(c => c.id === comment.id)) return prev;
+        const updated = [...prev, comment];
+        localStorage.setItem(`synapse_comments_${id}`, JSON.stringify(updated));
+        return updated;
+      });
+      toast('🎙️ New voice note from ' + (comment.author || 'Someone'), { icon: '💬' });
+    });
+    socket.on('room-comments-sync', ({ comments: serverComments }) => {
+      setComments(prev => {
+        const existingIds = new Set(prev.map(c => c.id));
+        const merged = [...prev, ...serverComments.filter(c => !existingIds.has(c.id))];
+        localStorage.setItem(`synapse_comments_${id}`, JSON.stringify(merged));
+        return merged;
+      });
+    });
+    socket.on('voice-comment-resolved', ({ cid }) => {
+      setComments(prev => prev.map(c => c.id === cid ? { ...c, resolved: true } : c));
+    });
+    socket.on('voice-comment-deleted', ({ cid }) => {
+      setComments(prev => prev.filter(c => c.id !== cid));
+    });
+    socket.emit('join-room', { roomId: `design-${id}`, name: 'You' });
+    return()=>{if(fabricRef.current)fabricRef.current.dispose();clearTimeout(autoSaveTimer.current);socket.disconnect()};
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[id]);
 
@@ -376,10 +504,39 @@ const Editor=()=>{
     const c={id:Date.now(),x:newCommentPos.x,y:newCommentPos.y,text:newCommentText.trim(),author:'You',time:new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}),resolved:false};
     const updated=[...comments,c];setComments(updated);
     localStorage.setItem(`synapse_comments_${id}`,JSON.stringify(updated));
-    setNewCommentPos(null);setNewCommentText('');setCommentMode(false);toast.success('Comment added');
+    if(socketRef.current) socketRef.current.emit('add-voice-comment',{roomId:`design-${id}`,comment:c});
+    setNewCommentPos(null);setNewCommentText('');setCommentMode(false);setCommentTab('text');toast.success('Comment added');
   };
-  const resolveComment=(cid)=>{const u=comments.map(c=>c.id===cid?{...c,resolved:true}:c);setComments(u);localStorage.setItem(`synapse_comments_${id}`,JSON.stringify(u));setActiveComment(null)};
-  const deleteComment=(cid)=>{const u=comments.filter(c=>c.id!==cid);setComments(u);localStorage.setItem(`synapse_comments_${id}`,JSON.stringify(u));setActiveComment(null)};
+
+  const addVoiceComment = async () => {
+    if (!audioBlob || !newCommentPos) return;
+    // Convert blob to base64 for storage/transport
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const base64 = reader.result; // data:audio/...;base64,...
+      const c = {
+        id: Date.now(),
+        x: newCommentPos.x,
+        y: newCommentPos.y,
+        text: '',
+        audioData: base64,
+        audioDuration: duration,
+        author: 'You',
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        resolved: false,
+        type: 'voice',
+      };
+      const updated = [...comments, c];
+      setComments(updated);
+      localStorage.setItem(`synapse_comments_${id}`, JSON.stringify(updated));
+      if (socketRef.current) socketRef.current.emit('add-voice-comment', { roomId: `design-${id}`, comment: c });
+      setNewCommentPos(null); clearAudio(); setCommentMode(false); setCommentTab('text');
+      toast.success('🎙️ Voice note added!');
+    };
+    reader.readAsDataURL(audioBlob);
+  };
+  const resolveComment=(cid)=>{const u=comments.map(c=>c.id===cid?{...c,resolved:true}:c);setComments(u);localStorage.setItem(`synapse_comments_${id}`,JSON.stringify(u));setActiveComment(null);if(socketRef.current)socketRef.current.emit('resolve-voice-comment',{roomId:`design-${id}`,cid});};
+  const deleteComment=(cid)=>{const u=comments.filter(c=>c.id!==cid);setComments(u);localStorage.setItem(`synapse_comments_${id}`,JSON.stringify(u));setActiveComment(null);if(socketRef.current)socketRef.current.emit('delete-voice-comment',{roomId:`design-${id}`,cid});};
 
   const tools=[
     {id:'select',  icon:<MousePointer size={16}/>,  label:'Select',   action:()=>{fabricRef.current&&(fabricRef.current.isDrawingMode=false);setActiveTool('select')}},
@@ -458,24 +615,85 @@ const Editor=()=>{
             <canvas ref={canvasRef}/>
             {comments.map(c=>!c.resolved&&<CommentPin key={c.id} comment={c} onClick={setActiveComment}/>)}
             {newCommentPos&&(
-              <div style={{position:'absolute',left:newCommentPos.x+10,top:newCommentPos.y+10,background:'#1a1a1a',border:'1px solid #6366f1',borderRadius:12,padding:12,zIndex:200,minWidth:240,boxShadow:'0 8px 32px rgba(0,0,0,.7)'}} onClick={e=>e.stopPropagation()}>
-                <p style={{fontSize:11,color:'#888',marginBottom:6}}>Add comment · Enter to post · Esc to cancel</p>
-                <textarea ref={commentInputRef} value={newCommentText} onChange={e=>setNewCommentText(e.target.value)}
-                  onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();addComment();}if(e.key==='Escape'){setNewCommentPos(null);}}}
-                  placeholder="Type your comment..." style={{width:'100%',background:'#111',border:'1px solid #333',borderRadius:8,color:'#fff',fontSize:12,padding:'8px 10px',resize:'none',outline:'none',height:68,fontFamily:'inherit'}}/>
-                <div style={{display:'flex',gap:6,marginTop:8}}>
-                  <button onClick={addComment} style={{flex:1,background:'#6366f1',border:'none',borderRadius:8,color:'#fff',fontSize:12,padding:'6px',cursor:'pointer',fontWeight:500}}>Post</button>
-                  <button onClick={()=>setNewCommentPos(null)} style={{background:'#222',border:'1px solid #333',borderRadius:8,color:'#888',fontSize:12,padding:'6px 10px',cursor:'pointer'}}>Cancel</button>
+              <div style={{position:'absolute',left:newCommentPos.x+10,top:newCommentPos.y+10,background:'#1a1a1a',border:'1px solid #6366f1',borderRadius:14,padding:14,zIndex:200,minWidth:280,boxShadow:'0 8px 32px rgba(0,0,0,.7)'}} onClick={e=>e.stopPropagation()}>
+                {/* Tabs */}
+                <div style={{display:'flex',gap:4,marginBottom:10,background:'#111',borderRadius:8,padding:3}}>
+                  <button onClick={()=>{setCommentTab('text');if(recording)stopRecording();clearAudio();}} style={{flex:1,padding:'5px 0',borderRadius:6,border:'none',background:commentTab==='text'?'#6366f1':'transparent',color:commentTab==='text'?'#fff':'#666',fontSize:11,cursor:'pointer',fontWeight:500,display:'flex',alignItems:'center',justifyContent:'center',gap:4}}>
+                    💬 Text
+                  </button>
+                  <button onClick={()=>setCommentTab('voice')} style={{flex:1,padding:'5px 0',borderRadius:6,border:'none',background:commentTab==='voice'?'#ec4899':'transparent',color:commentTab==='voice'?'#fff':'#666',fontSize:11,cursor:'pointer',fontWeight:500,display:'flex',alignItems:'center',justifyContent:'center',gap:4}}>
+                    🎙️ Voice
+                  </button>
                 </div>
+
+                {commentTab==='text'&&(
+                  <>
+                    <p style={{fontSize:11,color:'#888',marginBottom:6}}>Add comment · Enter to post · Esc to cancel</p>
+                    <textarea ref={commentInputRef} value={newCommentText} onChange={e=>setNewCommentText(e.target.value)}
+                      onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();addComment();}if(e.key==='Escape'){setNewCommentPos(null);}}}
+                      placeholder="Type your comment..." style={{width:'100%',background:'#111',border:'1px solid #333',borderRadius:8,color:'#fff',fontSize:12,padding:'8px 10px',resize:'none',outline:'none',height:68,fontFamily:'inherit',boxSizing:'border-box'}}/>
+                    <div style={{display:'flex',gap:6,marginTop:8}}>
+                      <button onClick={addComment} style={{flex:1,background:'#6366f1',border:'none',borderRadius:8,color:'#fff',fontSize:12,padding:'6px',cursor:'pointer',fontWeight:500}}>Post</button>
+                      <button onClick={()=>{setNewCommentPos(null);}} style={{background:'#222',border:'1px solid #333',borderRadius:8,color:'#888',fontSize:12,padding:'6px 10px',cursor:'pointer'}}>Cancel</button>
+                    </div>
+                  </>
+                )}
+
+                {commentTab==='voice'&&(
+                  <div>
+                    <p style={{fontSize:11,color:'#888',marginBottom:10}}>Record a voice note · Esc to cancel</p>
+                    {!audioUrl&&(
+                      <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:10}}>
+                        <button
+                          onClick={recording?stopRecording:startRecording}
+                          style={{width:60,height:60,borderRadius:'50%',border:'none',background:recording?'#ef4444':'#ec4899',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',boxShadow:recording?'0 0 0 8px rgba(239,68,68,0.2)':'none',transition:'all .2s'}}
+                        >
+                          {recording?<MicOff size={24} color="#fff"/>:<Mic size={24} color="#fff"/>}
+                        </button>
+                        {recording&&(
+                          <div style={{display:'flex',alignItems:'center',gap:6}}>
+                            <div style={{width:8,height:8,borderRadius:'50%',background:'#ef4444',animation:'blink 1s ease infinite'}}/>
+                            <span style={{fontSize:13,color:'#ef4444',fontWeight:600,fontFamily:'monospace'}}>
+                              {Math.floor(duration/60)}:{String(duration%60).padStart(2,'0')}
+                            </span>
+                          </div>
+                        )}
+                        {!recording&&<p style={{fontSize:11,color:'#555'}}>Tap to start recording</p>}
+                      </div>
+                    )}
+                    {audioUrl&&(
+                      <div>
+                        <AudioPlayer url={audioUrl} duration={duration}/>
+                        <div style={{display:'flex',gap:6,marginTop:10}}>
+                          <button onClick={addVoiceComment} style={{flex:1,background:'#ec4899',border:'none',borderRadius:8,color:'#fff',fontSize:12,padding:'6px',cursor:'pointer',fontWeight:500}}>🎙️ Post Voice Note</button>
+                          <button onClick={clearAudio} style={{background:'#222',border:'1px solid #333',borderRadius:8,color:'#888',fontSize:12,padding:'6px 10px',cursor:'pointer'}}><Trash size={12}/></button>
+                        </div>
+                      </div>
+                    )}
+                    <div style={{marginTop:8}}>
+                      <button onClick={()=>{setNewCommentPos(null);if(recording)stopRecording();clearAudio();}} style={{width:'100%',background:'#222',border:'1px solid #333',borderRadius:8,color:'#888',fontSize:12,padding:'6px 10px',cursor:'pointer',marginTop:4}}>Cancel</button>
+                    </div>
+                    <style>{`@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}`}</style>
+                  </div>
+                )}
               </div>
             )}
             {activeComment&&(
-              <div style={{position:'fixed',left:'50%',top:'50%',transform:'translate(-50%,-50%)',background:'#1a1a1a',border:'1px solid #6366f1',borderRadius:14,padding:20,zIndex:9000,minWidth:280,boxShadow:'0 16px 48px rgba(0,0,0,.8)'}} onClick={e=>e.stopPropagation()}>
+              <div style={{position:'fixed',left:'50%',top:'50%',transform:'translate(-50%,-50%)',background:'#1a1a1a',border:`1px solid ${activeComment.type==='voice'?'#ec4899':'#6366f1'}`,borderRadius:14,padding:20,zIndex:9000,minWidth:300,boxShadow:'0 16px 48px rgba(0,0,0,.8)'}} onClick={e=>e.stopPropagation()}>
                 <div style={{display:'flex',justifyContent:'space-between',marginBottom:10}}>
-                  <div><p style={{fontSize:12,fontWeight:600,color:'#fff'}}>{activeComment.author}</p><p style={{fontSize:10,color:'#555'}}>{activeComment.time}</p></div>
+                  <div style={{display:'flex',alignItems:'center',gap:8}}>
+                    <span style={{fontSize:18}}>{activeComment.type==='voice'?'🎙️':'💬'}</span>
+                    <div><p style={{fontSize:12,fontWeight:600,color:'#fff'}}>{activeComment.author}</p><p style={{fontSize:10,color:'#555'}}>{activeComment.time}</p></div>
+                  </div>
                   <button onClick={()=>setActiveComment(null)} style={{background:'none',border:'none',color:'#555',cursor:'pointer'}}><X size={14}/></button>
                 </div>
-                <p style={{fontSize:13,color:'#d1d5db',lineHeight:1.6,marginBottom:14}}>{activeComment.text}</p>
+                {activeComment.type==='voice'&&activeComment.audioData?(
+                  <div style={{marginBottom:14}}>
+                    <AudioPlayer url={activeComment.audioData} duration={activeComment.audioDuration||0}/>
+                  </div>
+                ):(
+                  <p style={{fontSize:13,color:'#d1d5db',lineHeight:1.6,marginBottom:14}}>{activeComment.text}</p>
+                )}
                 <div style={{display:'flex',gap:8}}>
                   <button onClick={()=>resolveComment(activeComment.id)} style={{flex:1,background:'rgba(34,197,94,0.12)',border:'1px solid rgba(34,197,94,0.3)',borderRadius:8,color:'#22c55e',fontSize:12,padding:'6px',cursor:'pointer'}}>✓ Resolve</button>
                   <button onClick={()=>deleteComment(activeComment.id)} style={{background:'rgba(239,68,68,0.1)',border:'1px solid rgba(239,68,68,0.3)',borderRadius:8,color:'#f87171',fontSize:12,padding:'6px 10px',cursor:'pointer'}}>Delete</button>
@@ -483,7 +701,7 @@ const Editor=()=>{
               </div>
             )}
           </div>
-          {commentMode&&<div style={{position:'absolute',top:12,left:'50%',transform:'translateX(-50%)',background:'rgba(99,102,241,0.9)',color:'#fff',fontSize:12,fontWeight:500,padding:'6px 16px',borderRadius:999,backdropFilter:'blur(8px)',pointerEvents:'none'}}>💬 Click canvas to add comment · Esc to cancel</div>}
+          {commentMode&&<div style={{position:'absolute',top:12,left:'50%',transform:'translateX(-50%)',background:'rgba(99,102,241,0.9)',color:'#fff',fontSize:12,fontWeight:500,padding:'6px 16px',borderRadius:999,backdropFilter:'blur(8px)',pointerEvents:'none'}}>💬 Click canvas to add text or voice note · Esc to cancel</div>}
         </main>
 
         {/* Right panel */}
@@ -630,9 +848,15 @@ const Editor=()=>{
                   ?<div className="text-center py-10 text-gray-600"><MessageSquarePlus size={28} className="mx-auto mb-2 opacity-30"/><p className="text-xs">No comments yet</p><p className="text-xs mt-1">Click 💬 toolbar button</p></div>
                   :<div className="space-y-2">
                     {comments.map(c=>(
-                      <div key={c.id} style={{background:c.resolved?'#0f0f0f':'rgba(99,102,241,0.06)',border:`1px solid ${c.resolved?'#1a1a1a':'rgba(99,102,241,0.2)'}`,borderRadius:10,padding:10,opacity:c.resolved?.5:1}}>
-                        <div className="flex items-center justify-between mb-1.5"><span className="text-xs font-medium text-white">{c.author}</span><span className="text-[10px] text-gray-600">{c.time}</span></div>
-                        <p className="text-xs text-gray-400 leading-relaxed mb-2">{c.text}</p>
+                      <div key={c.id} style={{background:c.resolved?'#0f0f0f':c.type==='voice'?'rgba(236,72,153,0.06)':'rgba(99,102,241,0.06)',border:`1px solid ${c.resolved?'#1a1a1a':c.type==='voice'?'rgba(236,72,153,0.25)':'rgba(99,102,241,0.2)'}`,borderRadius:10,padding:10,opacity:c.resolved?.5:1}}>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="text-xs font-medium text-white flex items-center gap-1">{c.type==='voice'?'🎙️':'💬'} {c.author}</span>
+                          <span className="text-[10px] text-gray-600">{c.time}</span>
+                        </div>
+                        {c.type==='voice'&&c.audioData
+                          ? <div style={{marginBottom:6}}><AudioPlayer url={c.audioData} duration={c.audioDuration||0}/></div>
+                          : <p className="text-xs text-gray-400 leading-relaxed mb-2">{c.text}</p>
+                        }
                         {!c.resolved&&<div className="flex gap-2">
                           <button onClick={()=>setActiveComment(c)} className="text-xs text-accent hover:underline">View</button>
                           <span className="text-gray-700">·</span>

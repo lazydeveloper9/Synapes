@@ -123,23 +123,28 @@ export default function OnboardingWizard() {
             style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.72)', backdropFilter:'blur(5px)', zIndex:10000 }}
           />
 
+          {/* Centering shell — flexbox keeps modal vertically centered & above footer */}
+          <div
+            style={{ position:'fixed', inset:0, zIndex:10001, display:'flex', alignItems:'center', justifyContent:'center', padding:'20px 16px', pointerEvents:'none' }}
+          >
           {/* Modal */}
           <motion.div
             initial={{ opacity:0, scale:0.88, y:32 }}
             animate={{ opacity:1, scale:1, y:0 }}
             exit={{ opacity:0, scale:0.94, y:20 }}
             transition={{ duration:0.35, ease:[0.25,0.46,0.45,0.94] }}
+            onClick={e=>e.stopPropagation()}
             style={{
-              position:'fixed', top:'50%', left:'50%',
-              transform:'translate(-50%,-50%)',
-              zIndex:10001, width:460, maxWidth:'92vw',
+              pointerEvents:'all',
+              zIndex:10001, width:'100%', maxWidth:460,
+              maxHeight:'calc(90vh - 40px)', overflowY:'auto',
               background:'#0f0f0f', border:'1px solid #1e1e1e',
-              borderRadius:24, overflow:'hidden',
+              borderRadius:24,
               boxShadow:'0 40px 120px rgba(0,0,0,.85), 0 0 0 1px rgba(99,102,241,0.12)',
             }}
           >
             {/* Progress bar */}
-            <div style={{ height:3, background:'#1a1a1a' }}>
+            <div style={{ height:3, background:'#1a1a1a', borderRadius:'24px 24px 0 0', overflow:'hidden' }}>
               <motion.div
                 style={{ height:'100%', background:`linear-gradient(90deg,${current.color},${current.color}99)` }}
                 animate={{ width:`${((step+1)/STEPS.length)*100}%` }}
@@ -202,15 +207,17 @@ export default function OnboardingWizard() {
                 )}
 
                 {/* Navigation */}
-                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginTop:4, paddingBottom:2 }}>
                   <button onClick={prev} disabled={step===0}
-                    style={{ display:'flex', alignItems:'center', gap:4, padding:'8px 12px', background:'none', border:'1px solid #2a2a2a', borderRadius:8, color:step===0?'#2a2a2a':'#888', cursor:step===0?'default':'pointer', fontSize:13, transition:'color .15s' }}
+                    style={{ display:'flex', alignItems:'center', gap:6, padding:'9px 16px', background:step===0?'transparent':'#1a1a1a', border:`1px solid ${step===0?'#1e1e1e':'#2e2e2e'}`, borderRadius:10, color:step===0?'#2a2a2a':'#888', cursor:step===0?'default':'pointer', fontSize:13, fontWeight:500, transition:'all .15s' }}
+                    onMouseEnter={e=>{ if(step>0){ e.currentTarget.style.color='#fff'; e.currentTarget.style.borderColor='#444'; }}}
+                    onMouseLeave={e=>{ e.currentTarget.style.color=step===0?'#2a2a2a':'#888'; e.currentTarget.style.borderColor=step===0?'#1e1e1e':'#2e2e2e'; }}
                   >
-                    <ChevronLeft size={13}/> Back
+                    <ChevronLeft size={15}/> Back
                   </button>
 
                   {/* Dot nav */}
-                  <div style={{ display:'flex', gap:6 }}>
+                  <div style={{ display:'flex', gap:6, alignItems:'center' }}>
                     {STEPS.map((_,i) => (
                       <motion.div key={i}
                         animate={{ width:i===step?22:8, background:i===step?current.color:'#2a2a2a' }}
@@ -221,14 +228,17 @@ export default function OnboardingWizard() {
                   </div>
 
                   <button onClick={next}
-                    style={{ display:'flex', alignItems:'center', gap:4, padding:'8px 18px', background:current.color, border:'none', borderRadius:8, color:'#fff', cursor:'pointer', fontSize:13, fontWeight:500 }}
+                    style={{ display:'flex', alignItems:'center', gap:6, padding:'9px 20px', background:`linear-gradient(135deg,${current.color},${current.color}cc)`, border:'none', borderRadius:10, color:'#fff', cursor:'pointer', fontSize:13, fontWeight:600, boxShadow:`0 4px 16px ${current.color}44`, transition:'all .15s' }}
+                    onMouseEnter={e=>{ e.currentTarget.style.opacity='0.88'; e.currentTarget.style.transform='translateY(-1px)'; }}
+                    onMouseLeave={e=>{ e.currentTarget.style.opacity='1'; e.currentTarget.style.transform='translateY(0)'; }}
                   >
-                    {step===STEPS.length-1?'Done':'Next'} <ChevronRight size={13}/>
+                    {step===STEPS.length-1?<>Done ✓</>:<>Next <ChevronRight size={15}/></>}
                   </button>
                 </div>
               </motion.div>
             </AnimatePresence>
           </motion.div>
+          </div>
         </>
       )}
     </AnimatePresence>

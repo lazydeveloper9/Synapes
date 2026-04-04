@@ -323,64 +323,149 @@ function Tetris({ onScore }) {
 
 /* ─── OfflineGame shell ───────────────────────────────────────────────────── */
 export default function OfflineGame() {
-  const [game,    setGame]    = useState('flappy');
-  const [score,   setScore]   = useState(0);
-  const [online,  setOnline]  = useState(navigator.onLine);
+  const [game,       setGame]       = useState('flappy');
+  const [score,      setScore]      = useState(0);
+  const [online,     setOnline]     = useState(navigator.onLine);
+  const [phase,      setPhase]      = useState('idle'); // 'idle' | 'prompt' | 'playing'
+  const [countdown,  setCountdown]  = useState(5);
+  const cdRef = useRef(null);
 
-  useEffect(()=>{
-    const on=()=>setOnline(true);
-    const off=()=>setOnline(false);
-    window.addEventListener('online',on);
-    window.addEventListener('offline',off);
-    return ()=>{ window.removeEventListener('online',on); window.removeEventListener('offline',off); };
-  },[]);
+  /* network listeners */
+  useEffect(() => {
+    const on  = () => { setOnline(true); setPhase('idle'); clearInterval(cdRef.current); };
+    const off = () => { setOnline(false); };
+    window.addEventListener('online',  on);
+    window.addEventListener('offline', off);
+    return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off); };
+  }, []);
 
-  if(online) return null;
+  /* when going offline: wait 5 s then show permission prompt */
+  useEffect(() => {
+    if (online) { clearInterval(cdRef.current); return; }
+    setPhase('idle');
+    setCountdown(5);
+    cdRef.current = setInterval(() => {
+      setCountdown(c => {
+        if (c <= 1) { clearInterval(cdRef.current); setPhase('prompt'); return 0; }
+        return c - 1;
+      });
+    }, 1000);
+    return () => clearInterval(cdRef.current);
+  }, [online]);
 
-  return (
+  /* online → invisible */
+  if (online) return null;
+
+  /* ── counting-down overlay ── */
+  if (phase === 'idle') return (
     <div style={{
-      position:'fixed',inset:0,background:'#050508',zIndex:999999,
-      display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:24,
+      position:'fixed', inset:0, background:'rgba(5,5,8,0.94)', zIndex:999999,
+      display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
+      fontFamily:'Inter,sans-serif', gap:18,
+    }}>
+      <div style={{ fontSize:52 }}>📡</div>
+      <h2 style={{ fontSize:22, fontWeight:700, color:'#fff', margin:0 }}>You're offline</h2>
+      <p style={{ fontSize:13, color:'#555', margin:0 }}>Checking your connection…</p>
+      <div style={{
+        width:60, height:60, borderRadius:'50%',
+        border:'3px solid #1e1e1e', borderTop:'3px solid #6366f1',
+        animation:'offspin 1s linear infinite',
+      }}/>
+      <p style={{ fontSize:12, color:'#444', margin:0 }}>
+        Opening Arcade in <span style={{ color:'#a5b4fc', fontWeight:700 }}>{countdown}</span>s…
+      </p>
+      <style>{`@keyframes offspin{to{transform:rotate(360deg)}}`}</style>
+    </div>
+  );
+
+  /* ── permission prompt ── */
+  if (phase === 'prompt') return (
+    <div style={{
+      position:'fixed', inset:0, background:'rgba(5,5,8,0.97)', zIndex:999999,
+      display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
       fontFamily:'Inter,sans-serif',
     }}>
-      {/* Header */}
-      <div style={{ textAlign:'center' }}>
-        <p style={{ fontSize:13, color:'#555', marginBottom:6, letterSpacing:'2px', textTransform:'uppercase' }}>
-          You're offline
-        </p>
-        <h1 style={{ fontSize:28, fontWeight:800, color:'#fff', letterSpacing:'-1px', margin:0 }}>
+      <div style={{
+        background:'#0f0f0f', border:'1px solid #1e1e1e', borderRadius:24, padding:'36px 32px',
+        maxWidth:400, width:'90vw', textAlign:'center',
+        boxShadow:'0 40px 100px rgba(0,0,0,0.9), 0 0 0 1px rgba(99,102,241,0.15)',
+      }}>
+        <div style={{ fontSize:56, marginBottom:16 }}>🕹️</div>
+        <h1 style={{ fontSize:24, fontWeight:800, color:'#fff', margin:'0 0 8px', letterSpacing:'-0.5px' }}>
           Synapse <span style={{ color:'#6366f1' }}>Arcade</span>
         </h1>
-        <p style={{ fontSize:12, color:'#444', marginTop:4 }}>Play while we reconnect…</p>
+        <p style={{ fontSize:13, color:'#555', marginBottom:24, lineHeight:1.75 }}>
+          You're currently offline. While we wait for your<br/>connection to return, want to play a quick game?
+        </p>
+        <div style={{ display:'flex', gap:8, justifyContent:'center', marginBottom:28 }}>
+          {[['🐦','Flappy Bird','#6366f1'],['🧱','Tetris','#22c55e']].map(([icon,name,color])=>(
+            <div key={name} style={{ padding:'8px 14px', borderRadius:10, background:color+'15', border:`1px solid ${color}30`, fontSize:12, color, fontWeight:600, display:'flex', alignItems:'center', gap:6 }}>
+              <span>{icon}</span> {name}
+            </div>
+          ))}
+        </div>
+        <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+          <button
+            onClick={() => { setPhase('playing'); setScore(0); }}
+            style={{ padding:'13px 20px', background:'linear-gradient(135deg,#6366f1,#8b5cf6)', border:'none', borderRadius:12, color:'#fff', fontSize:15, fontWeight:700, cursor:'pointer' }}
+          >
+            🎮 Let's Play!
+          </button>
+          <button
+            onClick={() => { setPhase('idle'); setCountdown(0); }}
+            style={{ padding:'10px 20px', background:'transparent', border:'1px solid #2a2a2a', borderRadius:12, color:'#555', fontSize:13, cursor:'pointer' }}
+          >
+            No thanks, I'll wait
+          </button>
+        </div>
+        <p style={{ fontSize:11, color:'#333', marginTop:20 }}>
+          We'll bring you back automatically when reconnected.
+        </p>
+      </div>
+    </div>
+  );
+
+  /* ── game screen ── */
+  return (
+    <div style={{
+      position:'fixed', inset:0, background:'#050508', zIndex:999999,
+      display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:18,
+      fontFamily:'Inter,sans-serif', overflowY:'auto',
+    }}>
+      <div style={{ textAlign:'center' }}>
+        <p style={{ fontSize:11, color:'#555', marginBottom:4, letterSpacing:'2px', textTransform:'uppercase' }}>You're offline</p>
+        <h1 style={{ fontSize:26, fontWeight:800, color:'#fff', letterSpacing:'-1px', margin:0 }}>
+          Synapse <span style={{ color:'#6366f1' }}>Arcade</span>
+        </h1>
       </div>
 
-      {/* Game switcher */}
-      <div style={{ display:'flex', gap:8, background:'#111', borderRadius:12, padding:4, border:'1px solid #1e1e1e' }}>
+      <div style={{ display:'flex', gap:6, background:'#111', borderRadius:12, padding:4, border:'1px solid #1e1e1e' }}>
         {[['flappy','🐦 Flappy Bird'],['tetris','🧱 Tetris']].map(([id,label])=>(
           <button key={id} onClick={()=>{ setGame(id); setScore(0); }}
-            style={{ padding:'8px 20px', borderRadius:9, border:'none', cursor:'pointer', fontSize:13, fontWeight:600, transition:'all .2s',
+            style={{ padding:'7px 18px', borderRadius:9, border:'none', cursor:'pointer', fontSize:13, fontWeight:600, transition:'all .2s',
               background: game===id?'#6366f1':'transparent', color: game===id?'#fff':'#666',
             }}
           >{label}</button>
         ))}
       </div>
 
-      {/* Score */}
-      <div style={{ display:'flex', gap:24, alignItems:'center' }}>
+      <div style={{ display:'flex', gap:20, alignItems:'center' }}>
         <div style={{ textAlign:'center' }}>
-          <p style={{ fontSize:11, color:'#555', margin:0 }}>SCORE</p>
-          <p style={{ fontSize:28, fontWeight:700, color:'#a5b4fc', margin:0, lineHeight:1 }}>{score}</p>
+          <p style={{ fontSize:10, color:'#555', margin:0 }}>SCORE</p>
+          <p style={{ fontSize:26, fontWeight:700, color:'#a5b4fc', margin:0, lineHeight:1 }}>{score}</p>
         </div>
+        <button
+          onClick={() => setPhase('prompt')}
+          style={{ padding:'6px 14px', background:'transparent', border:'1px solid #2a2a2a', borderRadius:8, color:'#555', fontSize:12, cursor:'pointer' }}
+        >✕ Exit Game</button>
       </div>
 
-      {/* Game canvas */}
       <div>
         {game==='flappy' && <FlappyBird onScore={setScore}/>}
         {game==='tetris' && <Tetris onScore={setScore}/>}
       </div>
 
-      {/* Controls hint */}
-      <p style={{ fontSize:11, color:'#333', textAlign:'center' }}>
+      <p style={{ fontSize:11, color:'#333', textAlign:'center', paddingBottom:16 }}>
         {game==='flappy'?'SPACE or tap to flap':'← → ↑ to move/rotate · SPACE to hard-drop · R to restart'}
       </p>
     </div>
