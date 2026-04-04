@@ -1,91 +1,109 @@
 const express = require('express');
+const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
-const bcrypt = require('bcryptjs');
-const User = require('../models/User');
-const { protect } = require('../middleware/auth');
+const { PrismaClient } = require('@prisma/client');
 
 const router = express.Router();
+const prisma = new PrismaClient();
 
-const generateToken = (id) => {
-  return jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: '7d' });
-};
+// The secret key for signing tokens (should be in your .env file)
+const JWT_SECRET = process.env.JWT_SECRET || 'your_fallback_super_secret_key';
 
-router.post('/register', async (req, res) => {
-  try {
-    const { name, email, password } = req.body;
-
-    if (!name || !email || !password) {
-      return res.status(400).json({ message: 'All fields are required' });
-    }
-
-    if (password.length < 6) {
-      return res.status(400).json({ message: 'Password must be at least 6 characters' });
-    }
-
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
-      return res.status(400).json({ message: 'Email already registered' });
-    }
-
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
-
-    const user = await User.create({
-      name,
-      email,
-      password: hashedPassword
-    });
-
-    const token = generateToken(user._id);
-
-    res.status(201).json({
-      message: 'Account created successfully',
-      token,
-      user: user.toJSON()
-    });
-
-  } catch (error) {
-    console.error('Register error:', error);
-    res.status(500).json({ message: 'Server error', error: error.message });
-  }
-});
-
-// LOGIN
+// ==========================================
+// POST /login - Authenticate existing user
+// ==========================================
 router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
 
+    // 1. Validate input
     if (!email || !password) {
-      return res.status(400).json({ message: 'Email and password required' });
+      return res.status(400).json({ error: 'Email and password are required' });
     }
 
-    const user = await User.findOne({ email });
+    // 2. Find the user in the database
+    const user = await prisma.user.findUnique({
+      where: { email: email }
+    });
+
     if (!user) {
-      return res.status(401).json({ message: 'Invalid email or password' });
+      return res.status(401).json({ error: 'Invalid email or password' });
     }
 
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) {
-      return res.status(401).json({ message: 'Invalid email or password' });
+    // 3. Verify the password
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+    if (!isPasswordValid) {
+      return res.status(401).json({ error: 'Invalid email or password' });
     }
 
-    const token = generateToken(user._id);
+    // 4. Generate JWT token
+    const token = jwt.sign(
+      { userId: user.id, email: user.email }, 
+      JWT_SECRET, 
+      { expiresIn: '24h' }
+    );
 
-    res.json({
+    // 5. Send success response (excluding the password hash)
+    res.status(200).json({
       message: 'Login successful',
       token,
-      user: user.toJSON()
+      user: {
+        id: user.id,
+        email: user.email
+      }
     });
 
   } catch (error) {
     console.error('Login error:', error);
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// GET ME
-router.get('/me', protect, async (req, res) => {
-  res.json({ user: req.user });
+// ==========================================
+// POST /register - Create a new user
+// ==========================================
+router.post('/register', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required' });
+    }
+
+    // 1. Check if user already exists
+    const existingUser = await prisma.user.findUnique({
+      where: { email: email }
+    });
+
+    if (existingUser) {
+      return res.status(409).json({ error: 'User already exists with this email' });
+    }
+
+    // 2. Hash the password securely
+    const saltRounds = 10;
+    const hashedPassword = await bcrypt.hash(password, saltRounds);
+
+    // 3. Save new user to database
+    const newUser = await prisma.user.create({
+      data: {
+        email,
+        password: hashedPassword,
+      }
+    });
+
+    // 4. Return success (excluding password)
+    res.status(201).json({
+      message: 'User registered successfully',
+      user: {
+        id: newUser.id,
+        email: newUser.email
+      }
+    });
+
+  } catch (error) {
+    console.error('Registration error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 module.exports = router;

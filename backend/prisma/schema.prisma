@@ -1,0 +1,36 @@
+// prisma/schema.prisma
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"] // Important for Alpine Linux Docker
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  name      String
+  email     String   @unique
+  password  String
+  avatar    String?  @default("")
+  createdAt DateTime @default(now())
+  designs   Design[]
+}
+
+model Design {
+  id         String   @id @default(uuid())
+  title      String   @default("Untitled Design") @db.VarChar(100)
+  ownerId    String
+  owner      User     @relation(fields: [ownerId], references: [id])
+  canvasData String?  @default("{}")
+  thumbnail  String?  @default("")
+  width      Int?     @default(1280)
+  height     Int?     @default(720)
+  isPublic   Boolean? @default(false)
+  tags       String[]
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}

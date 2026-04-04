@@ -1,0 +1,24 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: synapse-ingress
+  annotations:
+    nginx.ingress.kubernetes.io/websocket-services: "hocuspocus-service"
+spec:
+  rules:
+  - http:
+      paths:
+      - path: /collaboration
+        pathType: Prefix
+        backend:
+          service:
+            name: hocuspocus-service
+            port:
+              number: 1234
+      - path: /ai
+        pathType: Prefix
+        backend:
+          service:
+            name: ai-service
+            port:
+              number: 8000

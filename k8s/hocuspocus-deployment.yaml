@@ -1,0 +1,34 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hocuspocus-server
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: hocuspocus
+  template:
+    metadata:
+      labels:
+        app: hocuspocus
+    spec:
+      containers:
+      - name: hocuspocus
+        image: team-utkarsh/synapse-backend:latest
+        ports:
+        - containerPort: 1234
+        env:
+        - name: REDIS_URL
+          value: "redis://redis-service:6379"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hocuspocus-service
+spec:
+  type: ClusterIP
+  selector:
+    app: hocuspocus
+  ports:
+  - port: 1234
+    targetPort: 1234
