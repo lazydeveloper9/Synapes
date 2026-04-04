@@ -3,6 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 import { ArrowLeft, Plus, Trash2, Save, Download, Search, Share2, Check } from 'lucide-react';
+import { usePresence } from '../hooks/usePresence';
+import PresenceNav from '../components/PresenceNav';
+import VoiceChannel from '../components/VoiceChannel';
 import { useNotify, NotificationBell } from '../components/NotificationSystem';
 
 /* ─── constants ─────────────────────────────────────────────────────────── */
@@ -69,16 +72,18 @@ export default function ExcelEditor() {
   const autoRef = useRef(null);
 
   const [sheets,   setSheets]   = useState(loadSheets);
-  const [copied,   setCopied]   = useState(false);
-  const { notifyOpen } = useNotify();
   const [activeId, setActiveId] = useState(null);
   const [sel,      setSel]      = useState({ r: 0, c: 0 });
   const [editing,  setEditing]  = useState(false);
   const [formula,  setFormula]  = useState('');
   const [search,   setSearch]   = useState('');
+  const [copied,   setCopied]   = useState(false);
+  const { notifyOpen } = useNotify();
 
   const sheet = sheets.find(s => s.id === activeId);
   const grid  = sheet?.grid || emptyGrid();
+
+  const { presence, notifications } = usePresence(activeId ? `sheets-${activeId}` : null);
 
   const persist = useCallback((silent = false) => {
     if (!activeId) return;
@@ -95,7 +100,12 @@ export default function ExcelEditor() {
   const createSheet = () => {
     const s = newSheet(`Sheet ${sheets.length + 1}`);
     const updated = [...sheets, s];
-    setSheets(updated); saveSheets(updated); setActiveId(s.id);
+    setSheets(updated); saveSheets(updated); openSheet(s);
+  };
+
+  const openSheet = (s) => {
+    notifyOpen('sheets', s.name);
+    setActiveId(s.id);
   };
 
   const deleteSheet = (id, e) => {
@@ -143,7 +153,6 @@ export default function ExcelEditor() {
     toast.success('Exported as CSV!');
   };
 
-  const openSheet = (s) => { notifyOpen('sheets', s.name); setActiveId(s.id); };
   const filteredSheets = sheets.filter(s => s.name.toLowerCase().includes(search.toLowerCase()));
 
   return (
@@ -155,13 +164,16 @@ export default function ExcelEditor() {
         <div className="w-px h-6 bg-dark-600" />
         <span className="font-bold text-sm">📊 Synapse Sheets</span>
         <div className="flex-1" />
+        {provider && localUser && <VoiceChannel provider={provider} localUser={localUser} />}
+        <PresenceNav presence={presence} notifications={notifications} />
+        <div className="w-px h-6 bg-dark-600 mx-2"/>
         {sheet && (
           <>
             <button onClick={exportCSV}          className="btn-secondary text-xs px-3 py-1.5 h-8"><Download size={13}/> CSV</button>
-            <button onClick={() => { const url=`${window.location.origin}/sheets`; navigator.clipboard.writeText(url).catch(()=>{}); setCopied(true); setTimeout(()=>setCopied(false),2000); }} className="btn-secondary text-xs px-3 py-1.5 h-8" style={{color:copied?'#22c55e':undefined}}>
+            <button onClick={() => persist(false)} className="btn-primary text-xs px-3 py-1.5 h-8"><Save size={13}/> Save</button>
+            <button onClick={()=>{ const url=`${window.location.origin}/sheets?room=${sheet.id}`; navigator.clipboard.writeText(url).catch(()=>{}); setCopied(true); setTimeout(()=>setCopied(false),2000); toast.success('Shareable link copied!'); }} className="btn-secondary text-xs px-3 py-1.5 h-8" style={{color:copied?'#22c55e':undefined}}>
               {copied?<Check size={13}/>:<Share2 size={13}/>} {copied?'Copied!':'Share'}
             </button>
-            <button onClick={() => persist(false)} className="btn-primary text-xs px-3 py-1.5 h-8"><Save size={13}/> Save</button>
           </>
         )}
         <NotificationBell />

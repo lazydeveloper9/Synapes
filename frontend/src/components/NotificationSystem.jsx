@@ -1,17 +1,10 @@
-/**
- * NotificationSystem.jsx — Fixed
- * Root cause of crash: createContext(null) means useNotify() returns null outside provider,
- * and destructuring null throws. Fixed with a safe default context value.
- * Also fixed: Presentation icon doesn't exist in all lucide versions → use Monitor.
- */
+
 import { useState, useEffect, useRef, createContext, useContext } from 'react';
 import toast from 'react-hot-toast';
 import { Bell, X, FileText, LayoutGrid, Monitor, Code2, Palette } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-/* ─── Safe default context value ────────────────────────────────────────────
-   This prevents the crash when a component using useNotify() renders before
-   NotificationProvider mounts, or is accidentally used outside it.          */
+
 const DEFAULT_CTX = {
   notifs:      [],
   notifyOpen:  () => {},
@@ -42,19 +35,19 @@ const saveNotifs = (n) => {
   catch (_) {}
 };
 
-/* ─── Provider ───────────────────────────────────────────────────────────── */
+
 export function NotificationProvider({ children }) {
   const [notifs, setNotifs] = useState(loadNotifs);
   const channelRef = useRef(null);
 
   useEffect(() => {
-    // BroadcastChannel — cross-tab delivery
+  
     try {
       channelRef.current = new BroadcastChannel(CHANNEL);
       channelRef.current.onmessage = (e) => receiveEvent(e.data);
     } catch (_) { /* Safari private mode — BroadcastChannel not available */ }
 
-    // Storage event fallback for Safari
+    
     const onStorage = (e) => {
       if (e.key === 'synapse_last_event' && e.newValue) {
         try { receiveEvent(JSON.parse(e.newValue)); } catch (_) {}
@@ -66,7 +59,8 @@ export function NotificationProvider({ children }) {
       channelRef.current?.close();
       window.removeEventListener('storage', onStorage);
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+
+    
   }, []);
 
   const receiveEvent = (evt) => {

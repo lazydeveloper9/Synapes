@@ -12,7 +12,19 @@ import {
   MessageSquarePlus, X, Lock, Unlock, Eye, EyeOff,
   FlipHorizontal, FlipVertical, RotateCcw, Grid,
   MoveUp, MoveDown, ArrowUpToLine, ArrowDownToLine,
+  Share2, Check
 } from 'lucide-react';
+import { HocuspocusProvider } from "@hocuspocus/provider";
+import * as Y from "yjs";
+import { usePresence } from '../hooks/usePresence';
+import PresenceNav from '../components/PresenceNav';
+import VoiceChannel from '../components/VoiceChannel';
+import { useNotify, NotificationBell } from '../components/NotificationSystem';
+
+const envWsUrl = import.meta.env.VITE_WS_URL || '';
+const WS_URL = envWsUrl.includes('localhost')
+  ? envWsUrl.replace('localhost', window.location.hostname)
+  : (envWsUrl || `ws://${window.location.hostname}:1234`);
 
 const COLORS = ['#ffffff','#000000','#ef4444','#f97316','#eab308','#22c55e','#3b82f6','#8b5cf6','#ec4899','#14b8a6','#f1f5f9','#94a3b8','#64748b','#334155','#0f172a'];
 const FONTS  = ['Inter','Arial','Georgia','Times New Roman','Courier New','Verdana','Trebuchet MS','Comic Sans MS','Impact','Palatino'];
@@ -125,6 +137,57 @@ const Editor=()=>{
   const [layerVis,setLayerVis]=useState({});
   const [layerLocked,setLayerLocked]=useState({});
   const [layerTick,setLayerTick]=useState(0); // force re-render layers
+  const [copied, setCopied] = useState(false);
+  const { notifyOpen } = useNotify();
+
+  /* ── Collaboration State ── */
+  const [status, setStatus] = useState('connecting');
+  const ydocRef = useRef(new Y.Doc());
+  const providerRef = useRef(null);
+  const isRemoteUpdate = useRef(false);
+  const { presence, notifications, provider, localUser } = usePresence(id ? `canvas-${id}` : null);
+
+  /* ── Yjs Sync ── */
+  useEffect(() => {
+    const provider = new HocuspocusProvider({
+      url: WS_URL,
+      name: `canvas-${id}`,
+      document: ydocRef.current,
+      onStatus: ({ status }) => setStatus(status),
+    });
+    providerRef.current = provider;
+
+    const ymap = ydocRef.current.getMap('canvas');
+    ymap.observe((event) => {
+      if (event.keysChanged.has('data')) {
+        const newData = ymap.get('data');
+        if (newData && fabricRef.current) {
+          isRemoteUpdate.current = true;
+          try {
+            fabricRef.current.loadFromJSON(newData, () => {
+              fabricRef.current.renderAll();
+              isRemoteUpdate.current = false;
+              // update history silently without broadcasting back
+              const s = JSON.stringify(fabricRef.current.toJSON());
+              setHistory(p => { const t = p.slice(0, historyIndex + 1); return [...t, s].slice(-50) });
+              setHistoryIndex(p => Math.min(p + 1, 49));
+            });
+          } catch(e) {
+            isRemoteUpdate.current = false;
+          }
+        }
+      }
+    });
+
+    return () => provider.destroy();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+
+  const syncState = useCallback(() => {
+    if (isRemoteUpdate.current || !fabricRef.current) return;
+    const ymap = ydocRef.current.getMap('canvas');
+    ymap.set('data', JSON.stringify(fabricRef.current.toJSON()));
+  }, []);
 
   /* page zoom block */
   useEffect(()=>{
@@ -168,6 +231,8 @@ const Editor=()=>{
     const s=JSON.stringify(fabricRef.current.toJSON());
     setHistory(p=>{const t=p.slice(0,historyIndex+1);return[...t,s].slice(-50)});
     setHistoryIndex(p=>Math.min(p+1,49));
+    syncState();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   },[historyIndex]);
 
   const undo=()=>{
@@ -184,6 +249,7 @@ const Editor=()=>{
       const{data}=await api.get(`/designs/${id}`);
       setDesign(data.design); designRef.current=data.design;
       setTitle(data.design.title); initCanvas(data.design);
+      notifyOpen('editor', data.design.title);
       try{setComments(JSON.parse(localStorage.getItem(`synapse_comments_${id}`)||'[]'))}catch(_){}
     }catch{toast.error('Failed to load design');navigate('/dashboard');}
   };
@@ -417,6 +483,27 @@ const Editor=()=>{
           {openComments.length>0&&<span style={{position:'absolute',top:-4,right:-4,background:'#6366f1',color:'#fff',borderRadius:999,fontSize:9,fontWeight:700,padding:'0 4px',minWidth:14,height:14,display:'flex',alignItems:'center',justifyContent:'center',border:'2px solid #111'}}>{openComments.length}</span>}
         </div>
         <div className="w-px h-6 bg-dark-600"/>
+        <PresenceNav presence={presence} notifications={notifications} />
+        <VoiceChannel provider={provider} localUser={localUser} />
+        <span className="text-xs flex items-center px-2 border-r border-dark-600 mr-2" style={{color: status === "connected" ? "#4ade80" : "#fbbf24"}}>
+          {status === "connected" ? "● Connected" : "● Connecting..."}
+        </span>
+        <button onClick={async () => {
+          try {
+            if (design && !design.isPublic) {
+              await api.put(`/designs/${id}/share`, { isPublic: true });
+              setDesign(d => ({ ...d, isPublic: true }));
+            }
+            const link = `${window.location.origin}/editor/${id}`;
+            navigator.clipboard.writeText(link).catch(()=>{});
+            setCopied(true); setTimeout(()=>setCopied(false),2000);
+            toast.success('Shareable link copied!');
+          } catch (e) {
+            toast.error('Failed to create public link. Try again.');
+          }
+        }} className="btn-secondary text-xs px-3 py-1.5 h-8" style={{color:copied?'#22c55e':undefined}}>
+          {copied?<Check size={13}/>:<Share2 size={13}/>} {copied?'Copied!':'Share'}
+        </button>
         <div className="flex items-center gap-1 bg-dark-700 rounded-lg px-2 py-1">
           <button onClick={()=>applyZoomDelta(-10)} className="text-gray-400 hover:text-white p-0.5"><ZoomOut size={14}/></button>
           <span className="text-xs font-mono text-gray-300 w-10 text-center">{zoom}%</span>
@@ -426,6 +513,7 @@ const Editor=()=>{
           {saving?<><span className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin"/> Saving...</>:<><Save size={14}/> Save</>}
         </button>
         <ExportDropdown onExport={handleExport}/>
+        <NotificationBell />
       </header>
 
       <div className="flex flex-1 overflow-hidden">

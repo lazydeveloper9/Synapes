@@ -1,9 +1,4 @@
-/**
- * OnboardingWizard — shows ONLY after a fresh registration.
- * AuthContext sets localStorage.setItem('synapse_show_wizard','1') on register.
- * We read that flag; if present, show the wizard and remove it on dismiss.
- * Landing page still shows it automatically for unauthenticated visitors (first time).
- */
+
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';

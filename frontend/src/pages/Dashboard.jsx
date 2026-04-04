@@ -5,7 +5,7 @@ import api from '../api/axios';
 import toast from 'react-hot-toast';
 import {
   Plus, LogOut, Trash2, Edit3, Clock, Grid,
-  Search, Image, BarChart2, Share2, Check, ArrowLeft, Layers,
+  Search, Image, BarChart2, Share2, Check, ArrowLeft, Layers, LayoutGrid
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import AnalyticsDashboard from '../components/AnalyticsDashboard';
@@ -129,18 +129,16 @@ const Dashboard = () => {
 
       {/* Nav */}
       <nav className="bg-dark-800 border-b border-dark-600 px-6 py-3 flex items-center justify-between sticky top-0 z-50" style={{ backdropFilter:'blur(16px)' }}>
-        <div className="flex items-center gap-3">
-          <motion.button onClick={() => navigate('/hub')} className="tool-btn w-8 h-8" whileHover={{ scale:1.05 }} title="All Workspaces">
-            <ArrowLeft size={16} />
-          </motion.button>
-          <div className="w-px h-5 bg-dark-600" />
-          <motion.div className="flex items-center gap-2" whileHover={{ scale:1.02 }}>
-            <div className="w-8 h-8 bg-accent rounded-lg flex items-center justify-center">
-              <Layers size={16} />
-            </div>
-            <span className="font-bold text-lg tracking-tight">Design Studio</span>
+        <motion.div className="flex items-center gap-3" whileHover={{ scale: 1.02 }}>
+          <motion.div
+            className="w-8 h-8 bg-accent rounded-lg flex items-center justify-center"
+            animate={{ rotate: [0, 5, -5, 0] }}
+            transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut' }}
+          >
+            <Layers size={16} />
           </motion.div>
-        </div>
+          <span className="font-bold text-lg tracking-tight">Synapse</span>
+        </motion.div>
 
         {/* Search */}
         <div className="flex-1 max-w-sm mx-8">
@@ -160,6 +158,15 @@ const Dashboard = () => {
             </div>
             <span className="text-sm font-medium">{user?.name}</span>
           </div>
+          <motion.button
+            onClick={() => navigate('/hub')}
+            className="btn-secondary text-sm px-3 py-2"
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.97 }}
+            title="All Workspaces"
+          >
+            <LayoutGrid size={16} /> Workspaces
+          </motion.button>
           <button onClick={logout} className="btn-secondary text-sm px-3 py-2 text-red-400 hover:text-red-300">
             <LogOut size={15} /> Sign out
           </button>

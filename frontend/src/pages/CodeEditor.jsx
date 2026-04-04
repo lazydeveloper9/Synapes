@@ -3,6 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 import { ArrowLeft, Plus, Trash2, Save, Download, Play, Square as Stop, Search, Terminal, Share2, Check } from 'lucide-react';
+import { usePresence } from '../hooks/usePresence';
+import PresenceNav from '../components/PresenceNav';
+import VoiceChannel from '../components/VoiceChannel';
 import { useNotify, NotificationBell } from '../components/NotificationSystem';
 
 /* ─── constants ─────────────────────────────────────────────────────────── */
@@ -103,6 +106,8 @@ export default function CodeEditor() {
   const file  = files.find(f => f.id === activeId);
   const lang  = LANGS.find(l => l.id === file?.lang) || LANGS[0];
 
+  const { presence, notifications } = usePresence(activeId ? `code-${activeId}` : null);
+
   const persist = (silent=false) => {
     if (!activeId) return;
     setFiles(prev => {
@@ -124,11 +129,15 @@ export default function CodeEditor() {
     autoSave();
   };
 
-  const openFile = (f) => { notifyOpen('code', f.name); setActiveId(f.id); };
   const createFile = (langId='javascript') => {
     const f = newFile(langId);
     const updated = [f, ...files];
-    setFiles(updated); saveFiles(updated); setActiveId(f.id);
+    setFiles(updated); saveFiles(updated); openFile(f);
+  };
+
+  const openFile = (f) => {
+    notifyOpen('code', f.name);
+    setActiveId(f.id);
   };
 
   const deleteFile = (id, e) => {
@@ -210,6 +219,9 @@ export default function CodeEditor() {
         <div className="w-px h-6 bg-dark-600"/>
         <span className="font-bold text-sm">💻 Synapse Code</span>
         <div className="flex-1"/>
+        {provider && localUser && <VoiceChannel provider={provider} localUser={localUser} />}
+        <PresenceNav presence={presence} notifications={notifications} />
+        <div className="w-px h-6 bg-dark-600 mx-2"/>
 
         {/* Theme */}
         {['dark','mocha','light'].map(t => (
@@ -231,12 +243,10 @@ export default function CodeEditor() {
             )}
             <button onClick={downloadFile} className="btn-secondary text-xs px-3 py-1.5 h-8"><Download size={13}/></button>
             <button onClick={()=>persist(false)} className="btn-primary text-xs px-3 py-1.5 h-8"><Save size={13}/> Save</button>
+            <button onClick={()=>{ const url=`${window.location.origin}/code?room=${file.id}`; navigator.clipboard.writeText(url).catch(()=>{}); setCopied(true); setTimeout(()=>setCopied(false),2000); toast.success('Shareable link copied!'); }} className="btn-secondary text-xs px-3 py-1.5 h-8" style={{color:copied?'#22c55e':undefined}}>
+              {copied?<Check size={13}/>:<Share2 size={13}/>} {copied?'Copied!':'Share'}
+            </button>
           </>
-        )}
-        {file && (
-          <button onClick={()=>{ const url=`${window.location.origin}/code`; navigator.clipboard.writeText(url).catch(()=>{}); setCopied(true); setTimeout(()=>setCopied(false),2000); }} className="btn-secondary text-xs px-3 py-1.5 h-8" style={{color:copied?'#22c55e':undefined}}>
-            {copied?<Check size={13}/>:<Share2 size={13}/>} {copied?'Copied!':'Share'}
-          </button>
         )}
         <NotificationBell />
         <button onClick={logout} className="text-gray-500 hover:text-red-400 text-xs ml-1">Sign out</button>
