@@ -14,11 +14,11 @@ const designSchema = new mongoose.Schema({
     required: true
   },
   canvasData: {
-    type: String,  // JSON string of Fabric.js canvas state
+    type: String,  
     default: '{}'
   },
   thumbnail: {
-    type: String,  // base64 or URL
+    type: String,  
     default: ''
   },
   width: {

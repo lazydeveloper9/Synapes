@@ -1,3 +1,5 @@
+import ChatBot from '../components/ChatBot';
+import OnboardingWizard from '../components/OnboardingWizard';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -555,6 +557,8 @@ const Landing = () => {
         </div>
       </footer>
 
+    <OnboardingWizard />
+    <ChatBot />
     </div>
   );
 };
