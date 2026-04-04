@@ -6,7 +6,8 @@ require('dotenv').config();
 
 const authRoutes   = require('./routes/auth');
 const designRoutes = require('./routes/designs');
-const chatRoutes   = require('./routes/chat');      // ← NEW
+const chatRoutes   = require('./routes/chat');
+const aiRoutes     = require('./routes/ai');        // ← AI Vision + Generation
 
 const app = express();
 
@@ -27,7 +28,8 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 // Routes
 app.use('/api/auth',    authRoutes);
 app.use('/api/designs', designRoutes);
-app.use('/api/chat',    chatRoutes);               // ← NEW
+app.use('/api/chat',    chatRoutes);
+app.use('/api/ai',      aiRoutes);                 // ← AI Vision + Generation
 
 // Health check
 app.get('/api/health', (req, res) => res.json({ status: 'OK', message: 'Synapse API running' }));

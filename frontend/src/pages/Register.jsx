@@ -58,8 +58,9 @@ const Register = () => {
     setLoading(true);
     try {
       await register(form.name, form.email, form.password);
-      toast.success('Account created! Welcome to Synapse!');
-      navigate('/dashboard');
+      toast.success('Account created! Welcome to Synapse! 🎉');
+      localStorage.setItem('synapse_show_wizard', '1');
+      navigate('/hub');
     } catch (err) {
       toast.error(err.response?.data?.message || 'Registration failed');
     } finally {
