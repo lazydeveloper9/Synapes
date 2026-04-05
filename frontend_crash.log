@@ -1,0 +1,32 @@
+frontend-1  | 
+frontend-1  | > synapse-frontend@1.0.0 dev
+frontend-1  | > vite
+frontend-1  | 
+frontend-1  | 
+frontend-1  |   VITE v5.4.21  ready in 197 ms
+frontend-1  | 
+frontend-1  |   ➜  Local:   http://localhost:5173/
+frontend-1  |   ➜  Network: http://172.18.0.5:5173/
+frontend-1  | ✘ [ERROR] Could not resolve "y-prosemirror"
+frontend-1  | 
+frontend-1  |     node_modules/@tiptap/extension-collaboration/dist/index.js:3:116:
+frontend-1  |       3 │ ...mlFragmentToProsemirrorJSON, ySyncPluginKey } from 'y-prosemirror';
+frontend-1  |         ╵                                                       ~~~~~~~~~~~~~~~
+frontend-1  | 
+frontend-1  |   You can mark the path "y-prosemirror" as external to exclude it from the bundle, which will remove this error and leave the unresolved path in the bundle.
+frontend-1  | 
+frontend-1  | /usr/src/app/node_modules/esbuild/lib/main.js:1472
+frontend-1  |   let error = new Error(text);
+frontend-1  |               ^
+frontend-1  | 
+frontend-1  | Error: Build failed with 1 error:
+frontend-1  | node_modules/@tiptap/extension-collaboration/dist/index.js:3:116: ERROR: Could not resolve "y-prosemirror"
+frontend-1  |     at failureErrorWithLog (/usr/src/app/node_modules/esbuild/lib/main.js:1472:15)
+frontend-1  |     at /usr/src/app/node_modules/esbuild/lib/main.js:945:25
+frontend-1  |     at /usr/src/app/node_modules/esbuild/lib/main.js:1353:9
+frontend-1  |     at process.processTicksAndRejections (node:internal/process/task_queues:95:5) {
+frontend-1  |   errors: [Getter/Setter],
+frontend-1  |   warnings: [Getter/Setter]
+frontend-1  | }
+frontend-1  | 
+frontend-1  | Node.js v18.20.8

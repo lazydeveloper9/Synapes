@@ -11,6 +11,8 @@ import { usePresence } from '../hooks/usePresence';
 import PresenceNav from '../components/PresenceNav';
 import VoiceChannel from '../components/VoiceChannel';
 import { useNotify, NotificationBell } from '../components/NotificationSystem';
+import { useAIWorkspace } from '../hooks/useAIWorkspace';
+import AIPromptMenu, { AISelectionBubble } from '../components/AIPromptMenu';
 
 /* ─── helpers ─────────────────────────────────────────────────────────────── */
 const STORAGE_KEY = 'synapse_slides';
@@ -35,6 +37,19 @@ const newSlide = (themeIdx = 0) => ({
 const loadPresentations = () => { try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); } catch { return []; } };
 const savePresent = (d) => localStorage.setItem(STORAGE_KEY, JSON.stringify(d));
 
+const GESTURE_MAP = {
+  'hello': '👋', 'welcome': '👋', 'hi': '👋',
+  'look': '👉', 'attention': '🫵', 'this': '👉',
+  'perfect': '👌', 'good': '👍', 'great': '👍',
+  'stop': '✋', 'wait': '✋', 'halt': '✋',
+  'up': '👆', 'increase': '📈', 'higher': '👆',
+  'down': '👇', 'decrease': '📉', 'lower': '👇',
+  'thank you': '🙏', 'thanks': '🙏',
+  'love': '🫶', 'peace': '✌️',
+  'success': '🙌', 'applause': '👏', 'excellent': '🌟',
+  'question': '🙋', 'ask': '🙋'
+};
+
 /* ─── PptEditor ─────────────────────────────────────────────────────────── */
 export default function PptEditor() {
   const navigate = useNavigate();
@@ -51,10 +66,99 @@ export default function PptEditor() {
   const [themeIdx,   setThemeIdx]   = useState(0);
   const [presenting, setPresenting] = useState(false);
   const [copied,     setCopied]     = useState(false);
+  
+  const [gestureMode, setGestureMode] = useState(false);
+  const [liveGesture, setLiveGesture] = useState('');
+  const [liveTranscript, setLiveTranscript] = useState('');
+  
   const { notifyOpen } = useNotify();
 
   const theme = THEMES[themeIdx];
-  const { presence, notifications } = usePresence(activePresId ? `ppt-${activePresId}` : null);
+  const { presence, notifications, provider, localUser } = usePresence(activePresId ? `ppt-${activePresId}` : null);
+
+  const { aiMenuPos, contextText, closeMenu, selectionBubble, openFromBubble, closeBubble } = useAIWorkspace({
+    getEditorSelection: () => {
+      if (!fabricRef.current) return "";
+      const obj = fabricRef.current.getActiveObject();
+      if (obj && obj.type === 'i-text') {
+        const selectedStr = obj.getSelectedText();
+        return selectedStr ? selectedStr : obj.text;
+      }
+      return "";
+    }
+  });
+
+  /* ── AI Gesture Speech Engine ── */
+  useEffect(() => {
+    let recognition = null;
+    let fadeTimeout = null;
+
+    if (presenting && gestureMode) {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SpeechRecognition) {
+        toast.error("Speech Recognition not supported in this browser.");
+        setGestureMode(false);
+        return;
+      }
+      recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = 'en-US';
+
+      recognition.onresult = (event) => {
+        let finalTranscript = '';
+        let interimTranscript = '';
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          if (event.results[i].isFinal) {
+            finalTranscript += event.results[i][0].transcript;
+          } else {
+            interimTranscript += event.results[i][0].transcript;
+          }
+        }
+        
+        const currentText = (finalTranscript || interimTranscript).toLowerCase().trim();
+        setLiveTranscript(currentText);
+
+        // Map gesture looking for matching keywords
+        const words = currentText.split(/\s+/);
+        let foundGesture = null;
+        for (let w of words) {
+           if (GESTURE_MAP[w]) foundGesture = GESTURE_MAP[w];
+        }
+        
+        if (foundGesture) {
+           setLiveGesture(foundGesture);
+           clearTimeout(fadeTimeout);
+           fadeTimeout = setTimeout(() => {
+             setLiveGesture('');
+           }, 4000); // fade out after 4 seconds of silence
+        }
+      };
+
+      recognition.onend = () => {
+        // Continuous auto-restart
+        if (presenting && gestureMode) {
+           try { recognition.start(); } catch (e) {}
+        }
+      };
+
+      try {
+        recognition.start();
+      } catch (e) {
+         console.error("Speech recognition start failed", e);
+      }
+    } else {
+      if (recognition) recognition.stop();
+      setLiveGesture('');
+      setLiveTranscript('');
+      clearTimeout(fadeTimeout);
+    }
+
+    return () => {
+      if (recognition) recognition.stop();
+      clearTimeout(fadeTimeout);
+    };
+  }, [presenting, gestureMode]);
 
   /* ── Sync pres to state ── */
   useEffect(() => {
@@ -224,8 +328,98 @@ export default function PptEditor() {
           <button onClick={()=>setActiveSlide(s=>Math.max(0,s-1))} style={{ background:'#222', border:'1px solid #333', borderRadius:8, padding:'8px 16px', color:'#fff', cursor:'pointer' }}><ChevronLeft size={18}/></button>
           <span style={{ color:'#666', fontSize:13 }}>{activeSlide+1} / {slides.length}</span>
           <button onClick={()=>setActiveSlide(s=>Math.min(slides.length-1,s+1))} style={{ background:'#222', border:'1px solid #333', borderRadius:8, padding:'8px 16px', color:'#fff', cursor:'pointer' }}><ChevronRight size={18}/></button>
+          
+          <div style={{ width: 1, height: 24, background: '#333', margin: '0 8px' }} />
+          
+          <button onClick={()=>setGestureMode(!gestureMode)} style={{ background: gestureMode ? '#6366f1' : '#222', border: gestureMode ? '1px solid #8b5cf6' : '1px solid #333', borderRadius:8, padding:'8px 16px', color:'#fff', cursor:'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 'bold' }}>
+             {gestureMode ? '✋ AI Gestures: ON' : '✋ AI Gestures: OFF'}
+          </button>
+          
           <button onClick={()=>setPresenting(false)} style={{ background:'#ef4444', border:'none', borderRadius:8, padding:'8px 16px', color:'#fff', cursor:'pointer', marginLeft:12 }}>✕ Exit</button>
         </div>
+
+        {gestureMode && (
+          <div style={{
+            position: 'fixed', bottom: 24, right: 24, width: 280,
+            background: 'rgba(10,10,15,0.88)',
+            backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
+            border: '1px solid rgba(99,102,241,0.35)', borderRadius: 20,
+            boxShadow: '0 24px 80px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.04)',
+            zIndex: 99999, overflow: 'hidden',
+            display: 'flex', flexDirection: 'column',
+          }}>
+            {/* Title bar */}
+            <div style={{
+              display:'flex', alignItems:'center', justifyContent:'space-between',
+              padding:'10px 14px 8px', borderBottom:'1px solid rgba(255,255,255,0.06)',
+              background:'rgba(99,102,241,0.12)',
+            }}>
+              <div style={{ display:'flex', alignItems:'center', gap:7 }}>
+                <span style={{ fontSize:13 }}>✋</span>
+                <span style={{ fontSize:11, fontWeight:700, color:'#a5b4fc', letterSpacing:'0.08em', textTransform:'uppercase' }}>
+                  AI Gesture Engine
+                </span>
+              </div>
+              <div style={{ display:'flex', alignItems:'center', gap:5 }}>
+                <span style={{ width:7, height:7, borderRadius:'50%', background:'#22c55e', boxShadow:'0 0 8px #22c55e', display:'inline-block', animation:'gPulse 1.2s ease-in-out infinite' }}/>
+                <span style={{ fontSize:10, color:'#4ade80', fontWeight:600 }}>LIVE</span>
+              </div>
+            </div>
+
+            {/* Gesture emoji */}
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'center', padding:'18px 0 12px', minHeight:110 }}>
+              {liveGesture ? (
+                <div key={liveGesture} style={{
+                  fontSize:80, lineHeight:1,
+                  animation:'popIn 0.35s cubic-bezier(0.175,0.885,0.32,1.275) forwards',
+                  filter:'drop-shadow(0 6px 24px rgba(99,102,241,0.5))',
+                }}>
+                  {liveGesture}
+                </div>
+              ) : (
+                <div style={{ textAlign:'center' }}>
+                  <div style={{ fontSize:32, opacity:0.2 }}>🎙️</div>
+                  <p style={{ fontSize:11, color:'#444', marginTop:6 }}>Listening for keywords…</p>
+                </div>
+              )}
+            </div>
+
+            {/* Live transcript */}
+            <div style={{
+              margin:'0 12px 12px', background:'rgba(255,255,255,0.04)',
+              border:'1px solid rgba(255,255,255,0.06)', borderRadius:10,
+              padding:'8px 12px', minHeight:44, display:'flex', alignItems:'center',
+            }}>
+              <p style={{ fontSize:12, color: liveTranscript ? '#d1d5db' : '#374151', lineHeight:1.55, margin:0, fontStyle: liveTranscript ? 'normal' : 'italic' }}>
+                {liveTranscript || 'Start speaking…'}
+              </p>
+            </div>
+
+            {/* Keyword hint chips */}
+            <div style={{ padding:'4px 12px 12px', display:'flex', flexWrap:'wrap', gap:5 }}>
+              {[['hello','👋'],['look','👉'],['perfect','👌'],['stop','✋'],['up','👆'],['down','👇'],['thanks','🙏'],['success','🙌']].map(([kw,em]) => (
+                <span key={kw} style={{
+                  fontSize:10, padding:'3px 8px', borderRadius:6,
+                  background:'rgba(99,102,241,0.12)', border:'1px solid rgba(99,102,241,0.25)',
+                  color:'#818cf8', display:'flex', alignItems:'center', gap:4,
+                }}>
+                  {em} <span style={{ color:'#6366f1' }}>{kw}</span>
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <style>{`
+          @keyframes popIn {
+            0%   { opacity:0; transform:scale(0.4) translateY(20px) rotate(-10deg); }
+            100% { opacity:1; transform:scale(1)   translateY(0)    rotate(0deg);   }
+          }
+          @keyframes gPulse {
+            0%,100% { opacity:1; transform:scale(1); }
+            50%     { opacity:0.4; transform:scale(0.8); }
+          }
+        `}</style>
       </div>
     );
   }
@@ -337,9 +531,35 @@ export default function PptEditor() {
             {/* Canvas */}
             <main className="flex-1 overflow-auto flex items-center justify-center bg-dark-950"
               style={{ backgroundImage:'radial-gradient(#222 1px, transparent 1px)', backgroundSize:'20px 20px' }}>
-              <div className="shadow-2xl shadow-black">
+              <div className="shadow-2xl shadow-black" ref={canvasRef.current?.parentElement}>
                 <canvas ref={canvasRef}/>
               </div>
+              
+              <AISelectionBubble bubble={selectionBubble} onOpen={openFromBubble} onClose={closeBubble} />
+              <AIPromptMenu 
+                position={aiMenuPos} 
+                contextText={contextText} 
+                onClose={closeMenu} 
+                onInsert={(generatedText) => {
+                  if (!fabricRef.current) return;
+                  const obj = fabricRef.current.getActiveObject();
+                  if (obj && obj.type === 'i-text') {
+                    obj.set('text', generatedText);
+                  } else {
+                    const canvasLeft = 50;
+                    const canvasTop = 50;
+                    fabricRef.current.add(new fabric.IText(generatedText, {
+                      left: Math.max(10, canvasLeft),
+                      top: Math.max(10, canvasTop),
+                      fill: theme.text, 
+                      fontSize: 24, 
+                      fontFamily: 'Inter, sans-serif'
+                    }));
+                  }
+                  fabricRef.current.renderAll();
+                  persistCurrent();
+                }}
+              />
             </main>
           </div>
         ) : (

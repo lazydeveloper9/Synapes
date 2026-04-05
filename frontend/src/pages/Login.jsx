@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 import { Eye, EyeOff, Layers } from 'lucide-react';
@@ -52,6 +52,10 @@ const Login = () => {
   const [loading, setLoading]   = useState(false);
   const { login }    = useAuth();
   const navigate     = useNavigate();
+  const location     = useLocation();
+
+  // Read redirect destination from query string (set by ProtectedRoute)
+  const redirectTo = new URLSearchParams(location.search).get('redirect') || '/hub';
 
   const handleChange = e => setForm({ ...form, [e.target.name]: e.target.value });
 
@@ -61,7 +65,7 @@ const Login = () => {
     try {
       await login(form.email, form.password);
       toast.success('Welcome back!');
-      navigate('/hub');
+      navigate(decodeURIComponent(redirectTo));
     } catch (err) {
       toast.error(err.response?.data?.message || 'Login failed');
     } finally {

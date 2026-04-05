@@ -7,24 +7,18 @@ Write-Host "Stopping any running Docker instances of node services..."
 docker compose stop backend api-backend frontend
 
 Write-Host "Starting API Backend on Port 5000..."
-Start-Process -NoNewWindow -FilePath "node" -ArgumentList "server.js" -WorkingDirectory ".\api-backend" -Environment @{
-    DB_HOST="localhost"
-    DB_USER="synapse"
-    DB_PASSWORD="synapse"
-    DB_NAME="documents"
-    PORT="5000"
-    JWT_SECRET="synapse_jwt_secret_key_2024"
-}
+$env:DB_HOST="localhost"
+$env:DB_USER="synapse"
+$env:DB_PASSWORD="synapse"
+$env:DB_NAME="documents"
+$env:PORT="5000"
+$env:JWT_SECRET="synapse_jwt_secret_key_2024"
+Start-Process -NoNewWindow -FilePath "node" -ArgumentList "server.js" -WorkingDirectory ".\api-backend"
 
 Write-Host "Starting Hocuspocus Backend on Port 1234..."
-Start-Process -NoNewWindow -FilePath "node" -ArgumentList "server.js" -WorkingDirectory ".\backend" -Environment @{
-    REDIS_HOST="localhost"
-    DB_HOST="localhost"
-    DB_USER="synapse"
-    DB_PASSWORD="synapse"
-    DB_NAME="documents"
-    PORT="1234"
-}
+$env:REDIS_HOST="localhost"
+$env:PORT="1234"
+Start-Process -NoNewWindow -FilePath "node" -ArgumentList "server.js" -WorkingDirectory ".\backend"
 
 Write-Host "Starting Vite Frontend..."
 Start-Process -NoNewWindow -FilePath "npm.cmd" -ArgumentList "run dev" -WorkingDirectory ".\frontend"

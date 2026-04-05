@@ -7,6 +7,8 @@ import { usePresence } from '../hooks/usePresence';
 import PresenceNav from '../components/PresenceNav';
 import VoiceChannel from '../components/VoiceChannel';
 import { useNotify, NotificationBell } from '../components/NotificationSystem';
+import { useAIWorkspace } from '../hooks/useAIWorkspace';
+import AIPromptMenu, { AISelectionBubble } from '../components/AIPromptMenu';
 
 /* ─── constants ─────────────────────────────────────────────────────────── */
 const ROWS = 30;
@@ -83,7 +85,17 @@ export default function ExcelEditor() {
   const sheet = sheets.find(s => s.id === activeId);
   const grid  = sheet?.grid || emptyGrid();
 
-  const { presence, notifications } = usePresence(activeId ? `sheets-${activeId}` : null);
+  const { presence, notifications, provider, localUser } = usePresence(activeId ? `sheets-${activeId}` : null);
+
+  const selVal  = grid[sel.r]?.[sel.c] ?? '';
+  const selCell = sel.r >= 0 && sel.c >= 0 ? `${COL_LABELS[sel.c]}${sel.r + 1}` : '';
+
+  const { aiMenuPos, contextText, closeMenu, selectionBubble, openFromBubble, closeBubble } = useAIWorkspace({
+    getEditorSelection: () => {
+      // the window.getSelection() often grabs empty space on tables, so we pass the exact active cell value!
+      return selVal;
+    }
+  });
 
   const persist = useCallback((silent = false) => {
     if (!activeId) return;
@@ -130,8 +142,6 @@ export default function ExcelEditor() {
     autoSave();
   };
 
-  const selCell = sel.r >= 0 && sel.c >= 0 ? `${COL_LABELS[sel.c]}${sel.r + 1}` : '';
-  const selVal  = grid[sel.r]?.[sel.c] ?? '';
 
   const handleKey = (e, r, c) => {
     if (e.key === 'Enter') { setEditing(false); setSel({ r: Math.min(ROWS-1, r+1), c }); }
@@ -275,6 +285,16 @@ export default function ExcelEditor() {
                   ))}
                 </tbody>
               </table>
+              <AISelectionBubble bubble={selectionBubble} onOpen={openFromBubble} onClose={closeBubble} />
+              <AIPromptMenu 
+                position={aiMenuPos} 
+                contextText={contextText} 
+                onClose={closeMenu} 
+                onInsert={(generatedText) => {
+                  setCell(sel.r, sel.c, generatedText);
+                  setFormula(generatedText);
+                }}
+              />
             </div>
           </div>
         ) : (

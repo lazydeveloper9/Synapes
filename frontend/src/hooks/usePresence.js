@@ -16,7 +16,7 @@ export function usePresence(roomId) {
 
   const localUser = useMemo(() => {
     return {
-      id: user?._id || Math.random().toString(36).slice(2),
+      id: user?.id || user?._id || Math.random().toString(36).slice(2),
       name: user?.name || `Guest ${Math.floor(Math.random() * 999)}`,
       color: randColor(),
     };

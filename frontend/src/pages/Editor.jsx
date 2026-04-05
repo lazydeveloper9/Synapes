@@ -20,6 +20,8 @@ import { usePresence } from '../hooks/usePresence';
 import PresenceNav from '../components/PresenceNav';
 import VoiceChannel from '../components/VoiceChannel';
 import { useNotify, NotificationBell } from '../components/NotificationSystem';
+import { useAIWorkspace } from '../hooks/useAIWorkspace';
+import AIPromptMenu, { AISelectionBubble } from '../components/AIPromptMenu';
 
 const envWsUrl = import.meta.env.VITE_WS_URL || '';
 const WS_URL = envWsUrl.includes('localhost')
@@ -143,9 +145,20 @@ const Editor=()=>{
   /* ── Collaboration State ── */
   const [status, setStatus] = useState('connecting');
   const ydocRef = useRef(new Y.Doc());
-  const providerRef = useRef(null);
   const isRemoteUpdate = useRef(false);
   const { presence, notifications, provider, localUser } = usePresence(id ? `canvas-${id}` : null);
+
+  const { aiMenuPos, contextText, closeMenu, selectionBubble, openFromBubble, closeBubble } = useAIWorkspace({
+    getEditorSelection: () => {
+      if (!fabricRef.current) return "";
+      const obj = fabricRef.current.getActiveObject();
+      if (obj && obj.type === 'i-text') {
+        const selectedStr = obj.getSelectedText();
+        return selectedStr ? selectedStr : obj.text;
+      }
+      return "";
+    }
+  });
 
   /* ── Yjs Sync ── */
   useEffect(() => {
@@ -484,7 +497,7 @@ const Editor=()=>{
         </div>
         <div className="w-px h-6 bg-dark-600"/>
         <PresenceNav presence={presence} notifications={notifications} />
-        <VoiceChannel provider={provider} localUser={localUser} />
+        {provider && localUser && <VoiceChannel provider={provider} localUser={localUser} />}
         <span className="text-xs flex items-center px-2 border-r border-dark-600 mr-2" style={{color: status === "connected" ? "#4ade80" : "#fbbf24"}}>
           {status === "connected" ? "● Connected" : "● Connecting..."}
         </span>
@@ -572,6 +585,35 @@ const Editor=()=>{
             )}
           </div>
           {commentMode&&<div style={{position:'absolute',top:12,left:'50%',transform:'translateX(-50%)',background:'rgba(99,102,241,0.9)',color:'#fff',fontSize:12,fontWeight:500,padding:'6px 16px',borderRadius:999,backdropFilter:'blur(8px)',pointerEvents:'none'}}>💬 Click canvas to add comment · Esc to cancel</div>}
+          
+          <AISelectionBubble bubble={selectionBubble} onOpen={openFromBubble} onClose={closeBubble} />
+          <AIPromptMenu 
+            position={aiMenuPos} 
+            contextText={contextText} 
+            onClose={closeMenu} 
+            onInsert={(generatedText) => {
+              if (!fabricRef.current) return;
+              const obj = fabricRef.current.getActiveObject();
+              if (obj && obj.type === 'i-text') {
+                obj.set('text', generatedText);
+              } else {
+                const rect = wrapperRef.current?.getBoundingClientRect() || {left:0, top:0};
+                const canvasLeft = (aiMenuPos.x - rect.left) / (zoom / 100);
+                const canvasTop = (aiMenuPos.y - rect.top) / (zoom / 100);
+                fabricRef.current.add(new fabric.IText(generatedText, {
+                  left: Math.max(10, canvasLeft),
+                  top: Math.max(10, canvasTop),
+                  fill: fillColor, 
+                  fontSize, 
+                  fontWeight,
+                  fontFamily: 'Inter, sans-serif'
+                }));
+              }
+              fabricRef.current.renderAll();
+              pushHistory();
+              setLayerTick(t=>t+1);
+            }}
+          />
         </main>
 
         {/* Right panel */}

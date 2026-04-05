@@ -1,73 +1,88 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Mic, MicOff, Volume2, VolumeX, PhoneCall, PhoneOff } from 'lucide-react';
+import { Mic, MicOff, Volume2, VolumeX, PhoneCall, PhoneOff, Wifi, WifiOff } from 'lucide-react';
 import Peer from 'peerjs';
 
 export default function VoiceChannel({ provider, localUser }) {
-  const [isJoined, setIsJoined] = useState(false);
-  const [micEnabled, setMicEnabled] = useState(false);
+  const [isJoined,       setIsJoined]       = useState(false);
+  const [micEnabled,     setMicEnabled]     = useState(false);
   const [speakerEnabled, setSpeakerEnabled] = useState(true);
   const [connectedPeers, setConnectedPeers] = useState([]);
-  const [debugStatus, setDebugStatus] = useState('Disconnected');
-  
-  const peerRef = useRef(null);
-  const localStreamRef = useRef(null);
-  const audioRefs = useRef({}); 
-  const activeCalls = useRef({}); 
-  const silentStreamRef = useRef(null);
+  const [debugStatus,    setDebugStatus]    = useState('Disconnected');
+  const [peerServOk,     setPeerServOk]     = useState(false); // broker health
 
-  // Helper: Create a dummy silent audio stream so PeerJS can establish connections without mic access
-  const getFailsafeStream = useCallback(() => {
-    if (localStreamRef.current) return localStreamRef.current;
-    if (!silentStreamRef.current) {
-      try {
-        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  const peerRef        = useRef(null);
+  const localStreamRef = useRef(null);
+  const silentCtxRef   = useRef(null);
+  const audioRefs      = useRef({});
+  const activeCalls    = useRef({});
+
+  /* ── Silent fallback stream (allows WebRTC handshake without mic) ── */
+  const getSilentStream = useCallback(() => {
+    try {
+      if (!silentCtxRef.current) {
+        const ctx  = new (window.AudioContext || window.webkitAudioContext)();
         const dest = ctx.createMediaStreamDestination();
-        silentStreamRef.current = dest.stream;
-      } catch (e) {
-        console.warn('Silent audio fallback not supported in this browser.');
+        silentCtxRef.current = dest.stream;
       }
-    }
-    return silentStreamRef.current;
-  }, []); 
-  
-  // Clean up a specific call
-  const removePeerAudio = useCallback((peerId) => {
-    if (audioRefs.current[peerId]) {
-      const audioEl = audioRefs.current[peerId];
-      if (audioEl.parentNode) {
-        audioEl.parentNode.removeChild(audioEl);
-      }
-      audioEl.srcObject = null;
-      delete audioRefs.current[peerId];
-    }
-    if (activeCalls.current[peerId]) {
-      activeCalls.current[peerId].close();
-      delete activeCalls.current[peerId];
+      return silentCtxRef.current;
+    } catch (e) {
+      console.warn('[Voice] Silent stream creation failed:', e);
+      return null;
     }
   }, []);
 
-  // Handle incoming streams
-  const handleRemoteStream = useCallback((peerId, stream) => {
-    if (!audioRefs.current[peerId]) {
-      const audioEl = new Audio();
-      audioEl.autoplay = true;
-      document.body.appendChild(audioEl);
-      audioRefs.current[peerId] = audioEl;
+  /* ── Remove peer audio & close WebRTC call ── */
+  const removePeerAudio = useCallback((peerId) => {
+    const audio = audioRefs.current[peerId];
+    if (audio) {
+      audio.srcObject = null;
+      if (audio.parentNode) audio.parentNode.removeChild(audio);
+      delete audioRefs.current[peerId];
     }
-    const audioEl = audioRefs.current[peerId];
-    audioEl.srcObject = stream;
-    // Set speaker preference
-    audioEl.muted = !speakerEnabled;
-    audioEl.play().catch(e => console.warn('Audio play prevented:', e));
-    
-    setDebugStatus('Connected & Receiving');
+    const call = activeCalls.current[peerId];
+    if (call) {
+      try { call.close(); } catch (_) {}
+      delete activeCalls.current[peerId];
+    }
+    setConnectedPeers(prev => prev.filter(id => id !== peerId));
+  }, []);
+
+  /* ── Attach remote stream to an <audio> element ── */
+  const handleRemoteStream = useCallback((peerId, stream) => {
+    let audio = audioRefs.current[peerId];
+    if (!audio) {
+      audio = document.createElement('audio');
+      audio.autoplay  = true;
+      audio.playsInline = true;
+      document.body.appendChild(audio);
+      audioRefs.current[peerId] = audio;
+    }
+    audio.srcObject = stream;
+    audio.muted     = !speakerEnabled;
+    audio.play().catch(e => console.warn('[Voice] Play error:', e));
+    setDebugStatus('🔊 Receiving audio');
   }, [speakerEnabled]);
 
-  // Completely shutdown voice channel
+  /* ── Replace audio track in all active calls without reconnecting ── */
+  const replaceTrackInCalls = useCallback((newTrack) => {
+    Object.values(activeCalls.current).forEach(call => {
+      try {
+        const senders = call.peerConnection?.getSenders?.() || [];
+        const sender  = senders.find(s => s.track?.kind === 'audio');
+        if (sender) {
+          sender.replaceTrack(newTrack).catch(e => console.warn('[Voice] replaceTrack error:', e));
+        }
+      } catch (e) {
+        console.warn('[Voice] Could not replace track on call:', e);
+      }
+    });
+  }, []);
+
+  /* ── Full teardown ── */
   const teardownVoice = useCallback(() => {
     Object.keys(activeCalls.current).forEach(removePeerAudio);
     if (peerRef.current) {
-      peerRef.current.destroy();
+      try { peerRef.current.destroy(); } catch (_) {}
       peerRef.current = null;
     }
     if (localStreamRef.current) {
@@ -75,198 +90,250 @@ export default function VoiceChannel({ provider, localUser }) {
       localStreamRef.current = null;
     }
     if (provider?.awareness) {
-      const state = provider.awareness.getLocalState();
-      provider.awareness.setLocalState({ ...state, voicePeerId: null });
+      try {
+        const state = provider.awareness.getLocalState() || {};
+        provider.awareness.setLocalState({ ...state, voicePeerId: null });
+      } catch (_) {}
     }
     setMicEnabled(false);
+    setPeerServOk(false);
+    setConnectedPeers([]);
     setDebugStatus('Disconnected');
   }, [provider, removePeerAudio]);
 
-  // Initialize or re-index the Peer connection
+  /* ── Initialize PeerJS broker connection ── */
   const initPeer = useCallback((stream = null) => {
     if (peerRef.current) {
-      peerRef.current.destroy();
+      try { peerRef.current.destroy(); } catch (_) {}
     }
-    setDebugStatus('Connecting WebRTC...');
-    
-    const uniquePeerId = `${localUser.id}-${Math.random().toString(36).substring(7)}`;
-    const peer = new Peer(uniquePeerId, {
+    setDebugStatus('Connecting to broker…');
+    setPeerServOk(false);
+
+    const uniqueId  = `${(localUser?.id || 'guest').slice(0, 8)}-${Math.random().toString(36).slice(2, 7)}`;
+    const peerHost  = window.location.hostname;
+    const peerPort  = 5000;
+    const isSecure  = window.location.protocol === 'https:';
+
+    const peer = new Peer(uniqueId, {
+      host:   peerHost,
+      port:   peerPort,
+      path:   '/peerjs',
+      secure: isSecure,
+      debug:  0,
       config: {
         iceServers: [
           { urls: 'stun:stun.l.google.com:19302' },
-          { urls: 'stun:global.stun.twilio.com:3478' }
+          { urls: 'stun:stun1.l.google.com:19302' },
+          { urls: 'stun:global.stun.twilio.com:3478' },
         ]
       }
     });
+
     peerRef.current = peer;
 
     peer.on('open', (id) => {
-      setDebugStatus('Broker joined. Waiting...');
+      setPeerServOk(true);
+      setDebugStatus('Joined room — waiting for peers');
       if (provider?.awareness) {
-        const state = provider.awareness.getLocalState();
+        const state = provider.awareness.getLocalState() || {};
         provider.awareness.setLocalState({ ...state, voicePeerId: id });
       }
     });
 
+    /* Answer incoming calls */
     peer.on('call', (call) => {
-      // Answer the call with our local stream (or silent fallback if mic is off)
-      call.answer(stream || getFailsafeStream());
-      
-      call.on('stream', (remoteStream) => {
-        handleRemoteStream(call.peer, remoteStream);
-      });
-      call.on('close', () => removePeerAudio(call.peer));
-      call.on('error', () => removePeerAudio(call.peer));
-      
+      const answerStream = stream || localStreamRef.current || getSilentStream();
+      if (answerStream) {
+        call.answer(answerStream);
+      } else {
+        call.answer(); // answer with no stream — avoids call hanging
+      }
+      call.on('stream', remoteStream => handleRemoteStream(call.peer, remoteStream));
+      call.on('close', ()  => removePeerAudio(call.peer));
+      call.on('error', ()  => removePeerAudio(call.peer));
       activeCalls.current[call.peer] = call;
     });
 
-    peer.on('error', (err) => {
-      console.error('PeerJS error:', err);
-      setDebugStatus(`Error: ${err.type}`);
+    peer.on('disconnected', () => {
+      setDebugStatus('Broker disconnected — retrying…');
+      setPeerServOk(false);
+      try { peer.reconnect(); } catch (_) {}
     });
 
-  }, [localUser.id, provider, handleRemoteStream, removePeerAudio]);
+    peer.on('error', (err) => {
+      console.error('[Voice] PeerJS error:', err.type, err);
+      const msgs = {
+        'network':              '⚠ Network error',
+        'peer-unavailable':     '⚠ Peer unavailable',
+        'server-error':         '⚠ Broker unreachable',
+        'socket-error':         '⚠ Socket error',
+        'socket-closed':        '⚠ Socket closed',
+        'browser-incompatible': '⚠ Browser incompatible',
+        'unavailable-id':       '⚠ ID conflict — retrying',
+      };
+      setDebugStatus(msgs[err.type] || `⚠ Error: ${err.type}`);
+      if (err.type === 'unavailable-id') {
+        setTimeout(() => initPeer(stream), 1500);
+      }
+    });
+  }, [localUser, provider, getSilentStream, handleRemoteStream, removePeerAudio]);
 
-  // Toggle Connection State
-  const toggleConnection = () => {
-    if (!isJoined) {
-      setIsJoined(true);
-      initPeer(); // just join as listener initially without mic permission prompts
-    } else {
-      setIsJoined(false);
-      teardownVoice();
-    }
-  };
-
-  // Teardown heavily explicitly solely on unmount bounds
-  useEffect(() => {
-    return () => teardownVoice();
-  }, [teardownVoice]);
-
-  // Mesh Network Manager - Watch Yjs awareness for changes and dial missing peers
+  /* ── Mesh awareness: dial peers discovered via Yjs awareness ── */
   useEffect(() => {
     if (!isJoined || !provider?.awareness) return;
-    
-    const handleAwarenessUpdate = () => {
-      const states = provider.awareness.getStates();
-      const myPeerId = peerRef.current?.id;
-      if (!myPeerId) return;
 
-      // Extract all peer IDs listed by others
-      const remotePeerIds = Array.from(states.values())
+    const dial = () => {
+      const myId = peerRef.current?.id;
+      if (!myId || !peerRef.current?.open) return;
+
+      const states      = provider.awareness.getStates();
+      const remotePeers = Array.from(states.values())
         .map(s => s.voicePeerId)
-        .filter(id => id && id !== myPeerId);
-        
-      setConnectedPeers([...remotePeerIds]);
-        
-      // Dial any new peers that we haven't connected to yet
-      remotePeerIds.forEach(targetPeerId => {
-        if (!activeCalls.current[targetPeerId]) {
-          const call = peerRef.current.call(targetPeerId, localStreamRef.current || getFailsafeStream());
-          if (call) {
-             call.on('stream', (remoteStream) => {
-               handleRemoteStream(targetPeerId, remoteStream);
-             });
-             call.on('close', () => removePeerAudio(targetPeerId));
-             call.on('error', () => removePeerAudio(targetPeerId));
-             
-             activeCalls.current[targetPeerId] = call;
-          }
-        }
+        .filter(id => id && id !== myId);
+
+      setConnectedPeers([...remotePeers]);
+
+      // Dial new peers
+      remotePeers.forEach(targetId => {
+        if (activeCalls.current[targetId]) return;
+        const outStream = localStreamRef.current || getSilentStream();
+        if (!outStream) return;
+
+        const call = peerRef.current.call(targetId, outStream);
+        if (!call) return;
+
+        call.on('stream', remoteStream => handleRemoteStream(targetId, remoteStream));
+        call.on('close',  () => removePeerAudio(targetId));
+        call.on('error',  () => removePeerAudio(targetId));
+        activeCalls.current[targetId] = call;
+      });
+
+      // Hang up stale peers
+      Object.keys(activeCalls.current).forEach(existingId => {
+        if (!remotePeers.includes(existingId)) removePeerAudio(existingId);
       });
     };
-    
-    provider.awareness.on('change', handleAwarenessUpdate);
-    // Initial sync check
-    handleAwarenessUpdate();
-    
-    return () => provider.awareness.off('change', handleAwarenessUpdate);
-  }, [isJoined, provider, handleRemoteStream, removePeerAudio]);
 
-  // Microphone Toggle logic
-  const toggleMic = async () => {
-    if (!isJoined) return; // Must be joined to enable mic
-    
-    if (!localStreamRef.current) {
-      setDebugStatus('Requesting mic access...');
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        localStreamRef.current = stream;
-        setMicEnabled(true);
-        // By re-initializing the peer while passing the stream, it will re-invoke the Mesh network
-        initPeer(stream);
-      } catch (err) {
-        console.error('Microphone access denied: ', err);
-        setDebugStatus('Mic hardware blocked');
-      }
+    provider.awareness.on('change', dial);
+    dial(); // initial dial
+
+    return () => provider.awareness.off('change', dial);
+  }, [isJoined, provider, getSilentStream, handleRemoteStream, removePeerAudio]);
+
+  /* ── Cleanup on unmount ── */
+  useEffect(() => () => teardownVoice(), [teardownVoice]);
+
+  /* ── Join / Leave toggle ── */
+  const toggleConnection = () => {
+    if (isJoined) {
+      setIsJoined(false);
+      teardownVoice();
     } else {
-      // Audio stream exists, just flip the hardware bit safely
-      const audioTrack = localStreamRef.current.getAudioTracks()[0];
-      if (audioTrack) {
-        audioTrack.enabled = !audioTrack.enabled;
-        setMicEnabled(audioTrack.enabled);
-        setDebugStatus(audioTrack.enabled ? 'Mic Unmuted' : 'Mic Muted');
-      }
+      setIsJoined(true);
+      initPeer();
     }
   };
 
-  // Speaker Toggle logic
+  /* ── Microphone toggle ── */
+  const toggleMic = async () => {
+    if (!isJoined) return;
+
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setDebugStatus('⚠ Mic blocked — needs HTTPS or localhost');
+      return;
+    }
+
+    try {
+      if (!localStreamRef.current) {
+        setDebugStatus('Requesting mic access…');
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        localStreamRef.current = stream;
+        setMicEnabled(true);
+        setDebugStatus('🎙 Mic live');
+        // Push real mic track to existing calls seamlessly
+        replaceTrackInCalls(stream.getAudioTracks()[0]);
+      } else {
+        const track = localStreamRef.current.getAudioTracks()[0];
+        if (track) {
+          track.enabled = !track.enabled;
+          setMicEnabled(track.enabled);
+          setDebugStatus(track.enabled ? '🎙 Mic live' : '🔇 Mic muted');
+        }
+      }
+    } catch (err) {
+      console.error('[Voice] Mic error:', err);
+      const msgs = {
+        'NotAllowedError':     '🚫 Mic permission denied',
+        'NotFoundError':       '🚫 No mic found',
+        'NotReadableError':    '🚫 Mic in use by another app',
+        'OverconstrainedError':'🚫 Mic not compatible',
+      };
+      setDebugStatus(msgs[err.name] || `🚫 Mic error: ${err.name}`);
+    }
+  };
+
+  /* ── Speaker toggle ── */
   const toggleSpeaker = () => {
     const next = !speakerEnabled;
     setSpeakerEnabled(next);
-    Object.values(audioRefs.current).forEach(audio => {
-      audio.muted = !next;
-    });
+    Object.values(audioRefs.current).forEach(a => { a.muted = !next; });
   };
 
   return (
-    <div className="flex items-center gap-1.5 bg-dark-700/80 rounded-lg px-2 py-1 mx-1 border border-dark-600 shadow-inner overflow-hidden">
-      
-      {/* Join/Leave Connection Button */}
-      <button 
+    <div className="flex items-center gap-1.5 bg-dark-700/80 rounded-lg px-2 py-1 mx-1 border border-dark-600 shadow-inner">
+
+      {/* Join/Leave */}
+      <button
         onClick={toggleConnection}
-        title={isJoined ? "Disconnect Voice" : "Join Voice Channel"}
-        className={`flex items-center gap-1 p-1.5 rounded-md transition-all text-xs font-semibold ${
-          isJoined ? 'bg-red-500 hover:bg-red-600 text-white' : 'bg-emerald-600/80 hover:bg-emerald-500 text-white'
+        title={isJoined ? 'Leave Voice Room' : 'Join Voice Room'}
+        className={`flex items-center gap-1 px-2 py-1.5 rounded-md transition-all text-xs font-semibold ${
+          isJoined
+            ? 'bg-red-500 hover:bg-red-600 text-white'
+            : 'bg-emerald-600/80 hover:bg-emerald-500 text-white'
         }`}
       >
-        {isJoined ? <PhoneOff size={14} /> : <PhoneCall size={14} />}
+        {isJoined ? <PhoneOff size={13}/> : <PhoneCall size={13}/>}
         <span>{isJoined ? 'Leave' : 'Join'}</span>
       </button>
 
-      <div className="w-px h-4 bg-dark-600 mx-0.5" />
+      <div className="w-px h-4 bg-dark-600"/>
 
-      {/* Mic Toggle (only enabled if joined) */}
-      <button 
+      {/* Mic toggle */}
+      <button
         onClick={toggleMic}
         disabled={!isJoined}
-        title={micEnabled ? "Mute Microphone" : "Unmute Microphone"}
+        title={micEnabled ? 'Mute mic' : 'Unmute mic'}
         className={`p-1.5 rounded-md transition-all ${
-          !isJoined ? 'opacity-30 cursor-not-allowed text-gray-500' :
-          micEnabled ? 'bg-indigo-600/30 text-indigo-400' : 'text-gray-400 hover:text-white hover:bg-dark-600'
+          !isJoined          ? 'opacity-30 cursor-not-allowed text-gray-500' :
+          micEnabled         ? 'bg-indigo-600/30 text-indigo-400 hover:bg-indigo-600/50' :
+                               'text-gray-400 hover:text-white hover:bg-dark-600'
         }`}
       >
-        {micEnabled ? <Mic size={14} /> : <MicOff size={14} />}
+        {micEnabled ? <Mic size={13}/> : <MicOff size={13}/>}
       </button>
-      
-      {/* Speaker Toggle */}
-      <button 
+
+      {/* Speaker toggle */}
+      <button
         onClick={toggleSpeaker}
-        title={speakerEnabled ? "Mute Output" : "Unmute Output"}
-        className={`p-1.5 rounded-md transition-all ${speakerEnabled ? 'text-gray-300 hover:bg-dark-600 hover:text-white' : 'bg-red-500/20 text-red-400'}`}
+        title={speakerEnabled ? 'Mute speaker' : 'Unmute speaker'}
+        className={`p-1.5 rounded-md transition-all ${
+          speakerEnabled ? 'text-gray-300 hover:bg-dark-600 hover:text-white' : 'bg-red-500/20 text-red-400'
+        }`}
       >
-        {speakerEnabled ? <Volume2 size={14} /> : <VolumeX size={14} />}
+        {speakerEnabled ? <Volume2 size={13}/> : <VolumeX size={13}/>}
       </button>
-      
-      {/* Debug Indicator & Peers */}
-      <div className="flex flex-col items-end ml-1 mr-0.5 min-w-20">
-        <span className="text-[9px] text-gray-500 truncate max-w-24 uppercase font-bold" title={debugStatus}>
-          {debugStatus}
+
+      <div className="w-px h-4 bg-dark-600"/>
+
+      {/* Status + peer count */}
+      <div className="flex flex-col items-end min-w-[80px]">
+        <span className="flex items-center gap-1 text-[9px] uppercase font-bold text-gray-500 truncate max-w-[100px]" title={debugStatus}>
+          {isJoined && (peerServOk ? <Wifi size={9} className="text-emerald-400 shrink-0"/> : <WifiOff size={9} className="text-yellow-400 shrink-0"/>)}
+          <span>{debugStatus}</span>
         </span>
         {isJoined && (
           <span className="text-[10px] font-mono text-emerald-400 flex items-center gap-1 leading-none mt-0.5">
-            <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
+            <span className={`w-1.5 h-1.5 rounded-full ${peerServOk ? 'bg-emerald-500 animate-pulse' : 'bg-yellow-500'}`}/>
             {connectedPeers.length} {connectedPeers.length === 1 ? 'peer' : 'peers'}
           </span>
         )}

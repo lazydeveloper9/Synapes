@@ -3,6 +3,7 @@ const cors = require('cors');
 const path = require('path');
 require('dotenv').config();
 const { Pool } = require('pg');
+const { ExpressPeerServer } = require('peer');
 
 const pool = new Pool({
   host: process.env.DB_HOST || 'postgres',
@@ -68,7 +69,14 @@ app.get('/api/health', (req, res) => res.json({ status: 'OK', db: 'postgres' }))
 const PORT = process.env.PORT || 5000;
 
 initDB().then(() => {
-  app.listen(PORT, '0.0.0.0', () => {
+  const server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 API Backend running on http://0.0.0.0:${PORT}`);
   });
+  
+  const peerServer = ExpressPeerServer(server, {
+    debug: true,
+    path: '/'
+  });
+  app.use('/peerjs', peerServer);
+  console.log(`🚀 PeerJS Signaling Server running on http://0.0.0.0:${PORT}/peerjs`);
 });

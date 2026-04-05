@@ -7,6 +7,8 @@ import { usePresence } from '../hooks/usePresence';
 import PresenceNav from '../components/PresenceNav';
 import VoiceChannel from '../components/VoiceChannel';
 import { useNotify, NotificationBell } from '../components/NotificationSystem';
+import { useAIWorkspace } from '../hooks/useAIWorkspace';
+import AIPromptMenu, { AISelectionBubble } from '../components/AIPromptMenu';
 
 /* ─── constants ─────────────────────────────────────────────────────────── */
 const STORAGE_KEY = 'synapse_code';
@@ -106,7 +108,7 @@ export default function CodeEditor() {
   const file  = files.find(f => f.id === activeId);
   const lang  = LANGS.find(l => l.id === file?.lang) || LANGS[0];
 
-  const { presence, notifications } = usePresence(activeId ? `code-${activeId}` : null);
+  const { presence, notifications, provider, localUser } = usePresence(activeId ? `code-${activeId}` : null);
 
   const persist = (silent=false) => {
     if (!activeId) return;
@@ -117,6 +119,14 @@ export default function CodeEditor() {
     });
     if (!silent) toast.success('Saved! ✓');
   };
+
+  const { aiMenuPos, contextText, closeMenu, selectionBubble, openFromBubble, closeBubble } = useAIWorkspace({
+    getEditorSelection: () => {
+      if (!textareaRef.current) return "";
+      const el = textareaRef.current;
+      return (file?.code || "").substring(el.selectionStart, el.selectionEnd);
+    }
+  });
 
   const autoSave = () => { clearTimeout(autoRef.current); autoRef.current = setTimeout(()=>persist(true), 1500); };
 
@@ -339,6 +349,26 @@ export default function CodeEditor() {
                   caretColor: theme.text, fontFamily:'JetBrains Mono,monospace',
                   fontSize, lineHeight:1.8, whiteSpace:'pre', overflowWrap:'normal',
                   overflow:'auto',
+                }}
+              />
+              
+              <AISelectionBubble bubble={selectionBubble} onOpen={openFromBubble} onClose={closeBubble} />
+              <AIPromptMenu 
+                position={aiMenuPos} 
+                contextText={contextText} 
+                onClose={closeMenu} 
+                onInsert={(generatedText) => {
+                  const el = textareaRef.current;
+                  if (!el) return;
+                  const start = el.selectionStart;
+                  const end = el.selectionEnd;
+                  const code = file.code || '';
+                  const nextCode = code.slice(0, start) + generatedText + code.slice(end);
+                  updateCode(nextCode);
+                  setTimeout(() => { 
+                    el.selectionStart = el.selectionEnd = start + generatedText.length;
+                    el.focus();
+                  }, 0);
                 }}
               />
             </div>

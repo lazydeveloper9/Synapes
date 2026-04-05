@@ -10,6 +10,8 @@ import { usePresence } from '../hooks/usePresence';
 import PresenceNav from '../components/PresenceNav';
 import VoiceChannel from '../components/VoiceChannel';
 import { useNotify, NotificationBell } from '../components/NotificationSystem';
+import { useAIWorkspace } from '../hooks/useAIWorkspace';
+import AIPromptMenu, { AISelectionBubble } from '../components/AIPromptMenu';
 
 import {
   ArrowLeft, Plus, Trash2, Save, Download, FileText,
@@ -54,7 +56,16 @@ function TiptapRoom({ id, title, setTitle, persist, ydoc, provider, localUser, s
     editable: true,
   }, [provider]);
 
-  if (!editor || !provider) return <div className="p-12 text-gray-400">Loading editor...</div>;
+  const { aiMenuPos, contextText, closeMenu, selectionBubble, openFromBubble, closeBubble } = useAIWorkspace({
+    getEditorSelection: () => {
+      // Tiptap native selection mapping (more reliable than window obj)
+      if (!editor) return "";
+      const { from, to } = editor.state.selection;
+      return editor.state.doc.textBetween(from, to, ' ');
+    }
+  });
+
+  if (!editor) return <div className="flex-1 flex items-center justify-center bg-dark-950"><div className="w-8 h-8 border-2 border-accent border-t-transparent rounded-full animate-spin"/></div>;
 
   const exportTXT = () => {
     const text = editor.getText();
@@ -112,6 +123,20 @@ function TiptapRoom({ id, title, setTitle, persist, ydoc, provider, localUser, s
       {/* Content area */}
       <div className="flex-1 overflow-y-auto px-12 pb-16 tiptap-wrapper">
         <EditorContent editor={editor} style={{ minHeight: 400, outline: 'none', fontSize: 15, lineHeight: 1.8, color: '#d1d5db' }}  />
+        
+        {/* Floating AI bubble (appears on text selection) */}
+        <AISelectionBubble bubble={selectionBubble} onOpen={openFromBubble} onClose={closeBubble} />
+        {/* Universal AI Menu Popup */}
+        <AIPromptMenu 
+          position={aiMenuPos} 
+          contextText={contextText} 
+          onClose={closeMenu} 
+          onInsert={(generatedText) => {
+             // Insert at cursor or replace selection
+             editor.commands.insertContent(generatedText);
+             editor.commands.focus();
+          }}
+        />
       </div>
 
       <style>{`

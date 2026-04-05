@@ -1,0 +1,3329 @@
+diff --git a/frontend/src/App.jsx b/frontend_new/src/App.jsx
+index 6c17a5f..064d7af 100644
+--- a/frontend/src/App.jsx
++++ b/frontend_new/src/App.jsx
+@@ -2,16 +2,15 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+ import { Toaster } from 'react-hot-toast';
+ import { AuthProvider } from './context/AuthContext';
+ import ProtectedRoute from './components/ProtectedRoute';
++import { NotificationProvider } from './components/NotificationSystem';
+ 
+-// Existing pages (unchanged)
+-import Landing   from './pages/Landing';
+-import Login     from './pages/Login';
+-import Register  from './pages/Register';
+-import Dashboard from './pages/Dashboard';
+-import Editor    from './pages/Editor';
+-
+-// New pages
+-import WorkspaceHub from './pages/WorkspaceHub';
++// Pages
++import Landing      from './pages/Landing';
++import Login        from './pages/Login';
++import Register     from './pages/Register';
++import WorkspaceHub from './pages/WorkspaceHub';   // ← main post-login page
++import Dashboard    from './pages/Dashboard';       // Design workspace
++import Editor       from './pages/Editor';
+ import DocsEditor   from './pages/DocsEditor';
+ import ExcelEditor  from './pages/ExcelEditor';
+ import PptEditor    from './pages/PptEditor';
+@@ -21,35 +20,37 @@ export default function App() {
+   return (
+     <BrowserRouter>
+       <AuthProvider>
+-        <Toaster
+-          position="bottom-right"
+-          toastOptions={{
+-            style: { background: '#1a1a1a', color: '#fff', border: '1px solid #333' },
+-            success: { iconTheme: { primary: '#6366f1', secondary: '#fff' } },
+-          }}
+-        />
+-        <Routes>
+-          {/* Public */}
+-          <Route path="/"        element={<Landing />} />
+-          <Route path="/login"   element={<Login />} />
+-          <Route path="/register" element={<Register />} />
++        <NotificationProvider>
++          <Toaster
++            position="bottom-right"
++            toastOptions={{
++              style: { background: '#1a1a1a', color: '#fff', border: '1px solid #333' },
++              success: { iconTheme: { primary: '#6366f1', secondary: '#fff' } },
++            }}
++          />
++          <Routes>
++            {/* Public */}
++            <Route path="/"         element={<Landing />} />
++            <Route path="/login"    element={<Login />} />
++            <Route path="/register" element={<Register />} />
+ 
+-          {/* Design workspace (original) */}
+-          <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+-          <Route path="/editor/:id" element={<ProtectedRoute><Editor /></ProtectedRoute>} />
++            {/* Protected — hub is now the landing page after login */}
++            <Route path="/hub"      element={<ProtectedRoute><WorkspaceHub /></ProtectedRoute>} />
+ 
+-          {/* Workspace hub */}
+-          <Route path="/hub" element={<ProtectedRoute><WorkspaceHub /></ProtectedRoute>} />
++            {/* Design workspace */}
++            <Route path="/dashboard"   element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
++            <Route path="/editor/:id"  element={<ProtectedRoute><Editor /></ProtectedRoute>} />
+ 
+-          {/* New workspaces */}
+-          <Route path="/docs"   element={<ProtectedRoute><DocsEditor /></ProtectedRoute>} />
+-          <Route path="/sheets" element={<ProtectedRoute><ExcelEditor /></ProtectedRoute>} />
+-          <Route path="/slides" element={<ProtectedRoute><PptEditor /></ProtectedRoute>} />
+-          <Route path="/code"   element={<ProtectedRoute><CodeEditor /></ProtectedRoute>} />
++            {/* Other workspaces */}
++            <Route path="/docs"    element={<ProtectedRoute><DocsEditor /></ProtectedRoute>} />
++            <Route path="/sheets"  element={<ProtectedRoute><ExcelEditor /></ProtectedRoute>} />
++            <Route path="/slides"  element={<ProtectedRoute><PptEditor /></ProtectedRoute>} />
++            <Route path="/code"    element={<ProtectedRoute><CodeEditor /></ProtectedRoute>} />
+ 
+-          {/* Catch-all */}
+-          <Route path="*" element={<Navigate to="/" replace />} />
+-        </Routes>
++            {/* Catch-all */}
++            <Route path="*" element={<Navigate to="/" replace />} />
++          </Routes>
++        </NotificationProvider>
+       </AuthProvider>
+     </BrowserRouter>
+   );
+diff --git a/frontend/src/api/axios.js b/frontend_new/src/api/axios.js
+index 0f190c3..56971e7 100644
+--- a/frontend/src/api/axios.js
++++ b/frontend_new/src/api/axios.js
+@@ -1,7 +1,7 @@
+ import axios from 'axios';
+ 
+ const api = axios.create({
+-  baseURL: `http://${window.location.hostname}:5000/api`,
++  baseURL: 'http://localhost:5000/api',
+   headers: { 'Content-Type': 'application/json' }
+ });
+ 
+diff --git a/frontend/src/components/AnalyticsDashboard.jsx b/frontend_new/src/components/AnalyticsDashboard.jsx
+index 9dbdbb1..72c3513 100644
+--- a/frontend/src/components/AnalyticsDashboard.jsx
++++ b/frontend_new/src/components/AnalyticsDashboard.jsx
+@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
+ import { motion, AnimatePresence } from 'framer-motion';
+ import { X, Users, Clock, MousePointer, TrendingUp, Eye, Activity, BarChart2 } from 'lucide-react';
+ 
+-// ─── Deterministic "random" from string seed ─────────────────────────────────
+ const seededRand = (seed, min, max) => {
+   let h = 0;
+   for (let i = 0; i < seed.length; i++) h = (Math.imul(31, h) + seed.charCodeAt(i)) | 0;
+@@ -10,7 +9,7 @@ const seededRand = (seed, min, max) => {
+   return val;
+ };
+ 
+-// ─── Mini Sparkline ───────────────────────────────────────────────────────────
++
+ const Sparkline = ({ data, color = '#6366f1', height = 40 }) => {
+   const max = Math.max(...data);
+   const min = Math.min(...data);
+@@ -35,7 +34,6 @@ const Sparkline = ({ data, color = '#6366f1', height = 40 }) => {
+   );
+ };
+ 
+-// ─── Animated Counter ─────────────────────────────────────────────────────────
+ const Counter = ({ value, suffix = '' }) => {
+   const [count, setCount] = useState(0);
+   useEffect(() => {
+@@ -53,7 +51,6 @@ const Counter = ({ value, suffix = '' }) => {
+   return <span>{count.toLocaleString()}{suffix}</span>;
+ };
+ 
+-// ─── Radial Progress ──────────────────────────────────────────────────────────
+ const RadialProgress = ({ value, color = '#6366f1', size = 80 }) => {
+   const r = (size - 10) / 2;
+   const circ = 2 * Math.PI * r;
+@@ -74,11 +71,11 @@ const RadialProgress = ({ value, color = '#6366f1', size = 80 }) => {
+   );
+ };
+ 
+-// ─── AnalyticsDashboard ───────────────────────────────────────────────────────
++
+ const AnalyticsDashboard = ({ design, onClose }) => {
+   const id = design._id;
+ 
+-  // Deterministic "live" data seeded from design ID
++ 
+   const views      = seededRand(id + 'v', 120, 3800);
+   const users      = seededRand(id + 'u', 8, 240);
+   const sessions   = seededRand(id + 's', 30, 600);
+@@ -87,12 +84,12 @@ const AnalyticsDashboard = ({ design, onClose }) => {
+   const retention  = seededRand(id + 'r', 45, 92);
+   const edits      = seededRand(id + 'e', 50, 1200);
+ 
+-  // Sparkline data
++
+   const viewData  = Array.from({ length: 7 }, (_, i) => seededRand(id + 'vd' + i, 30, views));
+   const userDatum = Array.from({ length: 7 }, (_, i) => seededRand(id + 'ud' + i, 2, users));
+   const days      = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+ 
+-  // Bar chart data (hourly distribution)
++  
+   const hourlyMax = seededRand(id + 'hm', 40, 100);
+   const hourly    = Array.from({ length: 24 }, (_, i) => {
+     const base = i >= 9 && i <= 18 ? 60 : i >= 6 && i <= 22 ? 30 : 10;
+diff --git a/frontend/src/components/ChatBot.jsx b/frontend_new/src/components/ChatBot.jsx
+index 99c7555..3064a38 100644
+--- a/frontend/src/components/ChatBot.jsx
++++ b/frontend_new/src/components/ChatBot.jsx
+@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
+ import { motion, AnimatePresence } from 'framer-motion';
+ import { MessageCircle, X, Send, Loader2, ArrowRight, Sparkles } from 'lucide-react';
+ 
+-// ─── Quick Questions ──────────────────────────────────────────────────────────
++
+ const QUICK_QUESTIONS = [
+   { label: '✨ What is Synapse?',          message: 'What is Synapse and what can I do with it?', redirect: null },
+   { label: '🎨 How does the editor work?', message: 'How does the Synapse canvas editor work?',   redirect: null },
+@@ -18,7 +18,6 @@ Key features: Vector Canvas, Auto Save, PNG Export, Templates (Presentation, Soc
+ Keep answers concise (2-4 sentences). Be enthusiastic about design. If asked about pricing, it's always free. 
+ For technical questions about the app, explain clearly. Always end with an encouraging call to action.`;
+ 
+-// ─── Message Bubble ───────────────────────────────────────────────────────────
+ const MessageBubble = ({ msg }) => (
+   <motion.div
+     initial={{ opacity: 0, y: 10, scale: 0.97 }}
+diff --git a/frontend/src/components/OnboardingWizard.jsx b/frontend_new/src/components/OnboardingWizard.jsx
+index 14d4649..1e3967d 100644
+--- a/frontend/src/components/OnboardingWizard.jsx
++++ b/frontend_new/src/components/OnboardingWizard.jsx
+@@ -1,3 +1,4 @@
++
+ import { useState, useEffect } from 'react';
+ import { useNavigate } from 'react-router-dom';
+ import { motion, AnimatePresence } from 'framer-motion';
+@@ -6,47 +7,50 @@ import { X, ChevronRight, ChevronLeft, Sparkles } from 'lucide-react';
+ const STEPS = [
+   {
+     icon: '✦',
+-    title: 'Welcome to Synapse',
+-    desc: 'Your all-in-one creative workspace. Design, write, compute, present and code — all in one beautiful platform.',
++    title: 'Welcome to Synapse!',
++    desc: "You've just created your account. Here's a quick tour of everything you can do on the platform.",
+     cta: null,
+     color: '#6366f1',
+     visual: (
+       <div style={{ display:'flex', gap:10, flexWrap:'wrap', justifyContent:'center' }}>
+-        {['🎨 Design','📝 Docs','📊 Sheets','🖥️ Slides','💻 Code'].map(w => (
+-          <span key={w} style={{ fontSize:12, padding:'6px 12px', borderRadius:8, background:'rgba(99,102,241,0.15)', border:'1px solid rgba(99,102,241,0.3)', color:'#a5b4fc' }}>{w}</span>
++        {[
++          { label:'🎨 Design', color:'#6366f1' },
++          { label:'📝 Docs',   color:'#3b82f6' },
++          { label:'📊 Sheets', color:'#22c55e' },
++          { label:'🖥️ Slides', color:'#f97316' },
++          { label:'💻 Code',   color:'#ec4899' },
++        ].map(w => (
++          <span key={w.label} style={{ fontSize:12, padding:'6px 12px', borderRadius:8, background:w.color+'18', border:`1px solid ${w.color}33`, color:w.color, fontWeight:500 }}>{w.label}</span>
+         ))}
+       </div>
+     ),
+   },
+   {
+     icon: '🎨',
+-    title: 'Create stunning designs',
+-    desc: 'Use the vector canvas to design graphics, social posts, banners and presentations with shapes, text, layers, and one-click PNG export.',
++    title: 'Design Studio',
++    desc: 'Create stunning visuals with a professional vector canvas. Add shapes, text, and images. Export as PNG, PDF, DOC or ZIP.',
+     cta: null,
+-    color: '#8b5cf6',
++    color: '#6366f1',
+     visual: (
+-      <div style={{ width:200, height:130, background:'rgba(99,102,241,0.08)', border:'1px solid rgba(99,102,241,0.2)', borderRadius:12, display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', gap:8, margin:'0 auto' }}>
+-        <div style={{ width:80, height:8, background:'rgba(255,255,255,0.1)', borderRadius:4 }}/>
+-        <div style={{ display:'flex', gap:8 }}>
+-          <div style={{ width:48, height:48, borderRadius:8, background:'#6366f1' }}/>
+-          <div style={{ width:48, height:48, borderRadius:'50%', background:'#8b5cf6' }}/>
+-          <div style={{ width:0, height:0, borderTop:'24px solid transparent', borderBottom:'24px solid transparent', borderLeft:'42px solid #ec4899' }}/>
+-        </div>
++      <div style={{ width:220, height:130, background:'rgba(99,102,241,0.08)', border:'1px solid rgba(99,102,241,0.2)', borderRadius:12, display:'flex', alignItems:'center', justifyContent:'center', gap:10, margin:'0 auto' }}>
++        <div style={{ width:52, height:52, borderRadius:8, background:'#6366f1', opacity:0.7 }}/>
++        <div style={{ width:52, height:52, borderRadius:'50%', background:'#8b5cf6', opacity:0.7 }}/>
++        <div style={{ width:0, height:0, borderTop:'26px solid transparent', borderBottom:'26px solid transparent', borderLeft:'46px solid #ec4899', opacity:0.7 }}/>
+       </div>
+     ),
+   },
+   {
+-    icon: '📝',
+-    title: 'Write documents & more',
+-    desc: 'Rich text editor for Docs, powerful spreadsheet for Sheets, polished slides in Presentations, and a full code editor with run support.',
++    icon: '🛠️',
++    title: 'More Workspaces',
++    desc: 'Write documents in Docs, crunch numbers in Sheets, build presentations in Slides, and code in 8+ languages in Code Space.',
+     cta: null,
+     color: '#3b82f6',
+     visual: (
+-      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, maxWidth:220, margin:'0 auto' }}>
++      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, maxWidth:230, margin:'0 auto' }}>
+         {[['📝','Docs','#3b82f6'],['📊','Sheets','#22c55e'],['🖥️','Slides','#f97316'],['💻','Code','#ec4899']].map(([icon,label,color]) => (
+-          <div key={label} style={{ background:`${color}12`, border:`1px solid ${color}30`, borderRadius:10, padding:'10px 8px', textAlign:'center' }}>
+-            <div style={{ fontSize:20 }}>{icon}</div>
+-            <p style={{ fontSize:11, color:'#ccc', marginTop:4 }}>{label}</p>
++          <div key={label} style={{ background:`${color}12`, border:`1px solid ${color}30`, borderRadius:12, padding:'12px 8px', textAlign:'center' }}>
++            <div style={{ fontSize:22 }}>{icon}</div>
++            <p style={{ fontSize:11, color:'#bbb', marginTop:4 }}>{label}</p>
+           </div>
+         ))}
+       </div>
+@@ -54,15 +58,19 @@ const STEPS = [
+   },
+   {
+     icon: '🚀',
+-    title: 'Ready to get started?',
+-    desc: 'Create your free account in seconds — no credit card required. Everything is saved automatically in the cloud.',
+-    cta: { label: 'Create free account', href: '/register' },
+-    altCta: { label: 'Sign in', href: '/login' },
++    title: "You're all set!",
++    desc: "Everything auto-saves. Your designs are stored in the cloud. Docs, Sheets, Slides and Code are stored locally. Let's build something great!",
++    cta: { label: 'Go to Workspaces', href: '/hub' },
+     color: '#22c55e',
+     visual: (
+       <div style={{ textAlign:'center' }}>
+-        <div style={{ width:64, height:64, borderRadius:'50%', background:'linear-gradient(135deg,#6366f1,#8b5cf6)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:28, margin:'0 auto 12px' }}>✦</div>
+-        <p style={{ fontSize:12, color:'#22c55e', fontWeight:600 }}>Free forever · No credit card</p>
++        <motion.div
++          animate={{ scale:[1,1.08,1] }} transition={{ duration:2, repeat:Infinity }}
++          style={{ width:64, height:64, borderRadius:'50%', background:'linear-gradient(135deg,#6366f1,#8b5cf6)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:30, margin:'0 auto 12px' }}
++        >
++          ✦
++        </motion.div>
++        <p style={{ fontSize:12, color:'#22c55e', fontWeight:600 }}>Free forever · Auto-saves · No credit card</p>
+       </div>
+     ),
+   },
+@@ -70,17 +78,28 @@ const STEPS = [
+ 
+ export default function OnboardingWizard() {
+   const navigate = useNavigate();
+-  const [show,  setShow]  = useState(false);
+-  const [step,  setStep]  = useState(0);
++  const [show, setShow] = useState(false);
++  const [step, setStep] = useState(0);
+ 
+   useEffect(() => {
+-    const seen = localStorage.getItem('synapse_wizard_seen');
+-    if (!seen) { setTimeout(() => setShow(true), 1200); }
++    // Show if: freshly registered (flag set by AuthContext.register())
++    // OR first-ever visit to landing page (no flag at all)
++    const shouldShow = localStorage.getItem('synapse_show_wizard') === '1';
++    // Also show on landing page for brand-new visitors (no 'seen' key)
++    const neverSeen  = !localStorage.getItem('synapse_wizard_ever_seen');
++
++    if (shouldShow || neverSeen) {
++      setTimeout(() => setShow(true), 800);
++    }
+   }, []);
+ 
+   const dismiss = () => {
+     setShow(false);
+-    localStorage.setItem('synapse_wizard_seen', '1');
++    setStep(0);
++    // Remove the "show" flag (set by register)
++    localStorage.removeItem('synapse_show_wizard');
++    // Mark as ever seen (for landing page first-visit logic)
++    localStorage.setItem('synapse_wizard_ever_seen', '1');
+   };
+ 
+   const next = () => { if (step < STEPS.length - 1) setStep(s => s + 1); else dismiss(); };
+@@ -94,46 +113,45 @@ export default function OnboardingWizard() {
+         <>
+           {/* Backdrop */}
+           <motion.div
+-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
++            initial={{ opacity:0 }} animate={{ opacity:1 }} exit={{ opacity:0 }}
+             onClick={dismiss}
+-            style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.7)', backdropFilter:'blur(4px)', zIndex:10000 }}
++            style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.72)', backdropFilter:'blur(5px)', zIndex:10000 }}
+           />
+ 
+           {/* Modal */}
+           <motion.div
+             initial={{ opacity:0, scale:0.88, y:32 }}
+             animate={{ opacity:1, scale:1, y:0 }}
+-            exit={{ opacity:0, scale:0.92, y:20 }}
++            exit={{ opacity:0, scale:0.94, y:20 }}
+             transition={{ duration:0.35, ease:[0.25,0.46,0.45,0.94] }}
+             style={{
+-              position:'fixed', top:'50%', left:'50%', transform:'translate(-50%,-50%)',
+-              zIndex:10001, width:440, maxWidth:'90vw',
++              position:'fixed', top:'50%', left:'50%',
++              transform:'translate(-50%,-50%)',
++              zIndex:10001, width:460, maxWidth:'92vw',
+               background:'#0f0f0f', border:'1px solid #1e1e1e',
+               borderRadius:24, overflow:'hidden',
+-              boxShadow:'0 40px 120px rgba(0,0,0,0.8), 0 0 0 1px rgba(99,102,241,0.1)',
++              boxShadow:'0 40px 120px rgba(0,0,0,.85), 0 0 0 1px rgba(99,102,241,0.12)',
+             }}
+           >
+             {/* Progress bar */}
+             <div style={{ height:3, background:'#1a1a1a' }}>
+               <motion.div
+-                style={{ height:'100%', background:`linear-gradient(90deg, ${current.color}, ${current.color}99)` }}
+-                animate={{ width: `${((step+1)/STEPS.length)*100}%` }}
++                style={{ height:'100%', background:`linear-gradient(90deg,${current.color},${current.color}99)` }}
++                animate={{ width:`${((step+1)/STEPS.length)*100}%` }}
+                 transition={{ duration:0.4, ease:'easeOut' }}
+               />
+             </div>
+ 
+             {/* Header */}
+-            <div style={{ padding:'20px 24px 0', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
++            <div style={{ padding:'18px 24px 0', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+               <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+-                <Sparkles size={16} style={{ color: current.color }} />
+-                <span style={{ fontSize:12, color:'#666', fontWeight:500 }}>
+-                  Step {step+1} of {STEPS.length}
+-                </span>
++                <Sparkles size={15} style={{ color:current.color }} />
++                <span style={{ fontSize:11, color:'#555', fontWeight:500 }}>Step {step+1} of {STEPS.length}</span>
+               </div>
+               <button onClick={dismiss}
+-                style={{ background:'#1a1a1a', border:'1px solid #2a2a2a', borderRadius:8, padding:6, color:'#666', cursor:'pointer', display:'flex' }}
+-                onMouseEnter={e=>{ e.currentTarget.style.color='#fff'; e.currentTarget.style.background='#2a2a2a'; }}
+-                onMouseLeave={e=>{ e.currentTarget.style.color='#666'; e.currentTarget.style.background='#1a1a1a'; }}
++                style={{ background:'#1a1a1a', border:'1px solid #2a2a2a', borderRadius:8, padding:6, color:'#555', cursor:'pointer', display:'flex', transition:'all .15s' }}
++                onMouseEnter={e=>{ e.currentTarget.style.color='#fff'; e.currentTarget.style.background='#252525'; }}
++                onMouseLeave={e=>{ e.currentTarget.style.color='#555'; e.currentTarget.style.background='#1a1a1a'; }}
+               >
+                 <X size={14}/>
+               </button>
+@@ -143,69 +161,54 @@ export default function OnboardingWizard() {
+             <AnimatePresence mode="wait">
+               <motion.div
+                 key={step}
+-                initial={{ opacity:0, x:30 }} animate={{ opacity:1, x:0 }} exit={{ opacity:0, x:-30 }}
+-                transition={{ duration:0.25 }}
+-                style={{ padding:'24px 28px' }}
++                initial={{ opacity:0, x:28 }} animate={{ opacity:1, x:0 }} exit={{ opacity:0, x:-28 }}
++                transition={{ duration:0.22 }}
++                style={{ padding:'22px 28px 24px' }}
+               >
+-                {/* Icon */}
++                {/* Icon badge */}
+                 <motion.div
+                   initial={{ scale:0.6, opacity:0 }} animate={{ scale:1, opacity:1 }}
+-                  transition={{ delay:0.1, type:'spring', stiffness:400 }}
+-                  style={{
+-                    width:56, height:56, borderRadius:16,
+-                    background:`${current.color}18`, border:`1px solid ${current.color}33`,
+-                    display:'flex', alignItems:'center', justifyContent:'center',
+-                    fontSize:26, marginBottom:16,
+-                  }}
++                  transition={{ delay:0.05, type:'spring', stiffness:500 }}
++                  style={{ width:54, height:54, borderRadius:15, background:current.color+'18', border:`1px solid ${current.color}33`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:26, marginBottom:16 }}
+                 >
+                   {current.icon}
+                 </motion.div>
+ 
+-                <h2 style={{ fontSize:22, fontWeight:700, color:'#fff', marginBottom:10, lineHeight:1.2 }}>
++                <h2 style={{ fontSize:22, fontWeight:700, color:'#fff', marginBottom:10, lineHeight:1.2, letterSpacing:'-0.3px' }}>
+                   {current.title}
+                 </h2>
+-                <p style={{ fontSize:14, color:'#888', lineHeight:1.7, marginBottom:24 }}>
++                <p style={{ fontSize:13.5, color:'#777', lineHeight:1.75, marginBottom:24 }}>
+                   {current.desc}
+                 </p>
+ 
+                 {/* Visual */}
+                 <div style={{ marginBottom:28 }}>{current.visual}</div>
+ 
+-                {/* CTA buttons */}
++                {/* CTA */}
+                 {current.cta && (
+-                  <div style={{ display:'flex', flexDirection:'column', gap:10, marginBottom:16 }}>
+-                    <button
+-                      onClick={() => { dismiss(); navigate(current.cta.href); }}
+-                      style={{ padding:'13px 20px', background:`linear-gradient(135deg, #6366f1, #8b5cf6)`, border:'none', borderRadius:12, color:'#fff', fontSize:15, fontWeight:600, cursor:'pointer', boxShadow:'0 4px 20px rgba(99,102,241,0.35)' }}
+-                    >
+-                      {current.cta.label} →
+-                    </button>
+-                    {current.altCta && (
+-                      <button
+-                        onClick={() => { dismiss(); navigate(current.altCta.href); }}
+-                        style={{ padding:'11px 20px', background:'#1a1a1a', border:'1px solid #2a2a2a', borderRadius:12, color:'#aaa', fontSize:13, cursor:'pointer' }}
+-                        onMouseEnter={e=>e.currentTarget.style.color='#fff'}
+-                        onMouseLeave={e=>e.currentTarget.style.color='#aaa'}
+-                      >
+-                        {current.altCta.label}
+-                      </button>
+-                    )}
+-                  </div>
++                  <motion.button
++                    onClick={() => { dismiss(); navigate(current.cta.href); }}
++                    whileHover={{ scale:1.02, boxShadow:'0 4px 24px rgba(99,102,241,0.35)' }}
++                    whileTap={{ scale:0.98 }}
++                    style={{ width:'100%', padding:'13px 20px', background:'linear-gradient(135deg,#6366f1,#8b5cf6)', border:'none', borderRadius:12, color:'#fff', fontSize:15, fontWeight:600, cursor:'pointer', marginBottom:16 }}
++                  >
++                    {current.cta.label} →
++                  </motion.button>
+                 )}
+ 
+-                {/* Nav */}
++                {/* Navigation */}
+                 <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                   <button onClick={prev} disabled={step===0}
+-                    style={{ display:'flex', alignItems:'center', gap:4, padding:'8px 12px', background:'none', border:'1px solid #2a2a2a', borderRadius:8, color: step===0?'#333':'#888', cursor: step===0?'default':'pointer', fontSize:13 }}
++                    style={{ display:'flex', alignItems:'center', gap:4, padding:'8px 12px', background:'none', border:'1px solid #2a2a2a', borderRadius:8, color:step===0?'#2a2a2a':'#888', cursor:step===0?'default':'pointer', fontSize:13, transition:'color .15s' }}
+                   >
+-                    <ChevronLeft size={14}/> Back
++                    <ChevronLeft size={13}/> Back
+                   </button>
+ 
+-                  {/* Dots */}
++                  {/* Dot nav */}
+                   <div style={{ display:'flex', gap:6 }}>
+                     {STEPS.map((_,i) => (
+                       <motion.div key={i}
+-                        animate={{ width: i===step?20:8, background: i===step?current.color:'#2a2a2a' }}
++                        animate={{ width:i===step?22:8, background:i===step?current.color:'#2a2a2a' }}
+                         style={{ height:8, borderRadius:4, cursor:'pointer' }}
+                         onClick={()=>setStep(i)}
+                       />
+@@ -213,9 +216,9 @@ export default function OnboardingWizard() {
+                   </div>
+ 
+                   <button onClick={next}
+-                    style={{ display:'flex', alignItems:'center', gap:4, padding:'8px 16px', background: current.color, border:'none', borderRadius:8, color:'#fff', cursor:'pointer', fontSize:13, fontWeight:500 }}
++                    style={{ display:'flex', alignItems:'center', gap:4, padding:'8px 18px', background:current.color, border:'none', borderRadius:8, color:'#fff', cursor:'pointer', fontSize:13, fontWeight:500 }}
+                   >
+-                    {step === STEPS.length-1 ? 'Done' : 'Next'} <ChevronRight size={14}/>
++                    {step===STEPS.length-1?'Done':'Next'} <ChevronRight size={13}/>
+                   </button>
+                 </div>
+               </motion.div>
+diff --git a/frontend/src/components/ProtectedRoute.jsx b/frontend_new/src/components/ProtectedRoute.jsx
+index eab162d..a505462 100644
+--- a/frontend/src/components/ProtectedRoute.jsx
++++ b/frontend_new/src/components/ProtectedRoute.jsx
+@@ -8,8 +8,17 @@ const ProtectedRoute = ({ children }) => {
+     return (
+       <div className="h-screen w-screen flex items-center justify-center bg-dark-900">
+         <div className="flex flex-col items-center gap-4">
+-          <div className="w-10 h-10 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+-          <p className="text-gray-400 text-sm">Loading DesignForge...</p>
++          <div style={{ width:40, height:40, borderRadius:12, background:'linear-gradient(135deg,#6366f1,#8b5cf6)', display:'flex', alignItems:'center', justifyContent:'center', marginBottom:4 }}>
++            <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
++              <circle cx="11" cy="11" r="4" fill="#fff"/>
++              <circle cx="11" cy="3" r="2" fill="#fff" opacity="0.5"/>
++              <circle cx="11" cy="19" r="2" fill="#fff" opacity="0.5"/>
++              <circle cx="3" cy="11" r="2" fill="#fff" opacity="0.5"/>
++              <circle cx="19" cy="11" r="2" fill="#fff" opacity="0.5"/>
++            </svg>
++          </div>
++          <div className="w-8 h-8 border-2 border-accent border-t-transparent rounded-full animate-spin" />
++          <p className="text-gray-500 text-sm">Loading Synapse…</p>
+         </div>
+       </div>
+     );
+@@ -18,4 +27,4 @@ const ProtectedRoute = ({ children }) => {
+   return user ? children : <Navigate to="/login" replace />;
+ };
+ 
+-export default ProtectedRoute;
+\ No newline at end of file
++export default ProtectedRoute;
+diff --git a/frontend/src/pages/CodeEditor.jsx b/frontend_new/src/pages/CodeEditor.jsx
+index 862b6dd..85b3b56 100644
+--- a/frontend/src/pages/CodeEditor.jsx
++++ b/frontend_new/src/pages/CodeEditor.jsx
+@@ -2,11 +2,9 @@ import { useState, useRef, useEffect } from 'react';
+ import { useNavigate } from 'react-router-dom';
+ import { useAuth } from '../context/AuthContext';
+ import toast from 'react-hot-toast';
+-import { ArrowLeft, Plus, Trash2, Save, Download, Play, Square as Stop, Search, Terminal } from 'lucide-react';
+-import { usePresence } from '../hooks/usePresence';
+-import PresenceNav from '../components/PresenceNav';
++import { ArrowLeft, Plus, Trash2, Save, Download, Play, Square as Stop, Search, Terminal, Share2, Check } from 'lucide-react';
++import { useNotify, NotificationBell } from '../components/NotificationSystem';
+ 
+-/* ─── constants ─────────────────────────────────────────────────────────── */
+ const STORAGE_KEY = 'synapse_code';
+ 
+ const LANGS = [
+@@ -31,7 +29,7 @@ const saveFiles  = (f) => localStorage.setItem(STORAGE_KEY, JSON.stringify(f));
+ const timeAgo    = (ts) => { const m=Math.floor((Date.now()-ts)/60000); return m<60?`${m}m ago`:m<1440?`${Math.floor(m/60)}h ago`:`${Math.floor(m/1440)}d ago`; };
+ const newFile    = (lang='javascript') => ({ id: Date.now().toString(), name: `untitled.${LANGS.find(l=>l.id===lang)?.ext||'js'}`, lang, code: LANGS.find(l=>l.id===lang)?.id==='javascript'?'// Welcome to Synapse Code!\nconsole.log("Hello, world!");\n':'', updatedAt: Date.now() });
+ 
+-/* ─── syntax highlighter (simple regex-based) ────────────────────────────── */
++
+ const highlight = (code, langId) => {
+   if (!code) return '';
+   const esc = code.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+@@ -97,13 +95,13 @@ export default function CodeEditor() {
+   const [running,  setRunning]  = useState(false);
+   const [showOut,  setShowOut]  = useState(false);
+   const [fontSize, setFontSize] = useState(14);
++  const [copied,   setCopied]   = useState(false);
++  const { notifyOpen } = useNotify();
+ 
+   const theme = THEMES[themeKey];
+   const file  = files.find(f => f.id === activeId);
+   const lang  = LANGS.find(l => l.id === file?.lang) || LANGS[0];
+ 
+-  const { presence, notifications } = usePresence(activeId ? `code-${activeId}` : null);
+-
+   const persist = (silent=false) => {
+     if (!activeId) return;
+     setFiles(prev => {
+@@ -125,6 +123,7 @@ export default function CodeEditor() {
+     autoSave();
+   };
+ 
++  const openFile = (f) => { notifyOpen('code', f.name); setActiveId(f.id); };
+   const createFile = (langId='javascript') => {
+     const f = newFile(langId);
+     const updated = [f, ...files];
+@@ -210,8 +209,6 @@ export default function CodeEditor() {
+         <div className="w-px h-6 bg-dark-600"/>
+         <span className="font-bold text-sm">💻 Synapse Code</span>
+         <div className="flex-1"/>
+-        <PresenceNav presence={presence} notifications={notifications} />
+-        <div className="w-px h-6 bg-dark-600 mx-2"/>
+ 
+         {/* Theme */}
+         {['dark','mocha','light'].map(t => (
+@@ -235,6 +232,12 @@ export default function CodeEditor() {
+             <button onClick={()=>persist(false)} className="btn-primary text-xs px-3 py-1.5 h-8"><Save size={13}/> Save</button>
+           </>
+         )}
++        {file && (
++          <button onClick={()=>{ const url=`${window.location.origin}/code`; navigator.clipboard.writeText(url).catch(()=>{}); setCopied(true); setTimeout(()=>setCopied(false),2000); }} className="btn-secondary text-xs px-3 py-1.5 h-8" style={{color:copied?'#22c55e':undefined}}>
++            {copied?<Check size={13}/>:<Share2 size={13}/>} {copied?'Copied!':'Share'}
++          </button>
++        )}
++        <NotificationBell />
+         <button onClick={logout} className="text-gray-500 hover:text-red-400 text-xs ml-1">Sign out</button>
+       </nav>
+ 
+@@ -265,7 +268,7 @@ export default function CodeEditor() {
+                   <button onClick={()=>createFile()} className="mt-2 text-accent hover:underline">Create one →</button>
+                 </div>
+               : filtered.map(f => (
+-                <div key={f.id} onClick={()=>setActiveId(f.id)}
++                <div key={f.id} onClick={()=>openFile(f)}
+                   className={`p-2.5 rounded-lg cursor-pointer mb-1 group flex items-center gap-2 transition-colors ${activeId===f.id?'bg-dark-600 border border-accent/30':'hover:bg-dark-700'}`}>
+                   <span className="text-xs font-mono" style={{ color: LANGS.find(l=>l.id===f.lang)?.id==='javascript'?'#f0d060':LANGS.find(l=>l.id===f.lang)?.id==='python'?'#4ec9b0':'#9cdcfe' }}>
+                     {LANGS.find(l=>l.id===f.lang)?.ext||'?'}
+diff --git a/frontend/src/pages/Dashboard.jsx b/frontend_new/src/pages/Dashboard.jsx
+index 392ba5b..a142e3e 100644
+--- a/frontend/src/pages/Dashboard.jsx
++++ b/frontend_new/src/pages/Dashboard.jsx
+@@ -1,83 +1,89 @@
+-import { useState, useEffect } from 'react';
++import { useState, useEffect, useRef } from 'react';
+ import { useNavigate } from 'react-router-dom';
+ import { useAuth } from '../context/AuthContext';
+ import api from '../api/axios';
+ import toast from 'react-hot-toast';
+ import {
+-  Plus, Layers, LogOut, Trash2, Edit3, Clock, Grid,
+-  Search, MoreVertical, Image, BarChart2, LayoutGrid
++  Plus, LogOut, Trash2, Edit3, Clock, Grid,
++  Search, Image, BarChart2, Share2, Check, ArrowLeft, Layers,
+ } from 'lucide-react';
+ import { motion, AnimatePresence } from 'framer-motion';
+ import AnalyticsDashboard from '../components/AnalyticsDashboard';
++import { NotificationBell, useNotify } from '../components/NotificationSystem';
+ 
+ const TEMPLATES = [
+-  { name: 'Presentation', w: 1920, h: 1080, icon: '🎞️' },
+-  { name: 'Social Post',  w: 1080, h: 1080, icon: '📱' },
+-  { name: 'Banner',       w: 1200, h: 628,  icon: '🖼️' },
+-  { name: 'Poster',       w: 794,  h: 1123, icon: '📄' },
++  { name: 'Presentation', w: 1920, h: 1080, emoji: '🎞️' },
++  { name: 'Social Post',  w: 1080, h: 1080, emoji: '📱' },
++  { name: 'Banner',       w: 1200, h: 628,  emoji: '🖼️' },
++  { name: 'Poster',       w: 794,  h: 1123, emoji: '📄' },
+ ];
+ 
+-// ─── Animation variants ───────────────────────────────────────────────────────
+-const pageVariants = {
+-  initial: { opacity: 0 },
+-  animate: { opacity: 1, transition: { duration: 0.4 } },
+-};
++const pageV     = { initial:{ opacity:0 }, animate:{ opacity:1, transition:{ duration:0.35 } } };
++const gridV     = { animate:{ transition:{ staggerChildren:0.05 } } };
++const cardV     = { initial:{ opacity:0, y:18, scale:0.97 }, animate:{ opacity:1, y:0, scale:1, transition:{ duration:0.32, ease:'easeOut' } }, exit:{ opacity:0, scale:0.9, transition:{ duration:0.18 } } };
++const templateV = { initial:{ opacity:0, scale:0.9 }, animate:(i)=>({ opacity:1, scale:1, transition:{ delay:0.08+i*0.05, duration:0.28, ease:'backOut' } }) };
+ 
+-const navVariants = {
+-  initial: { y: -60, opacity: 0 },
+-  animate: { y: 0, opacity: 1, transition: { duration: 0.4, ease: 'easeOut' } },
+-};
++/* ─── Share button ────────────────────────────────────────────────────────── */
++const ShareBtn = ({ designId, title }) => {
++  const [copied, setCopied] = useState(false);
+ 
+-const sectionVariants = {
+-  initial: { opacity: 0, y: 24 },
+-  animate: (delay = 0) => ({ opacity: 1, y: 0, transition: { duration: 0.45, delay, ease: [0.25, 0.46, 0.45, 0.94] } }),
+-};
+-
+-const gridVariants = {
+-  animate: { transition: { staggerChildren: 0.055 } },
+-};
+-
+-const cardVariants = {
+-  initial: { opacity: 0, y: 20, scale: 0.97 },
+-  animate: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.35, ease: 'easeOut' } },
+-  exit:    { opacity: 0, scale: 0.9, transition: { duration: 0.2 } },
+-};
++  const handleShare = (e) => {
++    e.stopPropagation();
++    const url = `${window.location.origin}/editor/${designId}`;
++    navigator.clipboard.writeText(url).then(() => {
++      setCopied(true);
++      toast.success('Link copied to clipboard!', { duration: 2000 });
++      setTimeout(() => setCopied(false), 2000);
++    }).catch(() => {
++      // Fallback
++      const el = document.createElement('input');
++      el.value = url; document.body.appendChild(el); el.select();
++      document.execCommand('copy'); document.body.removeChild(el);
++      setCopied(true);
++      toast.success('Link copied!', { duration: 2000 });
++      setTimeout(() => setCopied(false), 2000);
++    });
++  };
+ 
+-const templateVariants = {
+-  initial: { opacity: 0, scale: 0.9 },
+-  animate: (i) => ({ opacity: 1, scale: 1, transition: { delay: 0.1 + i * 0.05, duration: 0.3, ease: 'backOut' } }),
++  return (
++    <motion.button
++      onClick={handleShare}
++      title="Copy share link"
++      whileHover={{ scale: 1.1 }}
++      whileTap={{ scale: 0.9 }}
++      style={{
++        width: 28, height: 28, borderRadius: 7, border: 'none',
++        background: copied ? 'rgba(34,197,94,0.15)' : 'rgba(99,102,241,0.12)',
++        color: copied ? '#22c55e' : '#a5b4fc',
++        display: 'flex', alignItems: 'center', justifyContent: 'center',
++        cursor: 'pointer', flexShrink: 0, transition: 'background .2s, color .2s',
++      }}
++    >
++      {copied ? <Check size={13} /> : <Share2 size={13} />}
++    </motion.button>
++  );
+ };
+ 
+-// ─── Dashboard ────────────────────────────────────────────────────────────────
++/* ─── Dashboard ──────────────────────────────────────────────────────────── */
+ const Dashboard = () => {
+   const [designs,  setDesigns]  = useState([]);
+   const [loading,  setLoading]  = useState(true);
+   const [search,   setSearch]   = useState('');
+   const [creating, setCreating] = useState(false);
+-  const [analyticsDesign, setAnalyticsDesign] = useState(null); // which design to show analytics for
+-  const [openMenu, setOpenMenu] = useState(null); // design._id with open context menu
++  const [analyticsDesign, setAnalyticsDesign] = useState(null);
+ 
+   const { user, logout } = useAuth();
++  const { notifyOpen }   = useNotify();
+   const navigate = useNavigate();
+ 
+   useEffect(() => { fetchDesigns(); }, []);
+ 
+-  // Close menu on outside click
+-  useEffect(() => {
+-    const handler = () => setOpenMenu(null);
+-    if (openMenu) document.addEventListener('click', handler);
+-    return () => document.removeEventListener('click', handler);
+-  }, [openMenu]);
+-
+   const fetchDesigns = async () => {
+     try {
+       const { data } = await api.get('/designs');
+       setDesigns(data.designs);
+-    } catch {
+-      toast.error('Failed to load designs');
+-    } finally {
+-      setLoading(false);
+-    }
++    } catch { toast.error('Failed to load designs'); }
++    finally  { setLoading(false); }
+   };
+ 
+   const createDesign = async (template = null) => {
+@@ -88,11 +94,8 @@ const Dashboard = () => {
+         : { title: 'Untitled Design', width: 1280, height: 720 };
+       const { data } = await api.post('/designs', payload);
+       navigate(`/editor/${data.design._id}`);
+-    } catch {
+-      toast.error('Failed to create design');
+-    } finally {
+-      setCreating(false);
+-    }
++    } catch { toast.error('Failed to create design'); }
++    finally  { setCreating(false); }
+   };
+ 
+   const deleteDesign = async (id, e) => {
+@@ -102,14 +105,15 @@ const Dashboard = () => {
+       await api.delete(`/designs/${id}`);
+       setDesigns(d => d.filter(x => x._id !== id));
+       toast.success('Design deleted');
+-    } catch {
+-      toast.error('Failed to delete');
+-    }
++    } catch { toast.error('Failed to delete'); }
+   };
+ 
+-  const filtered = designs.filter(d =>
+-    d.title.toLowerCase().includes(search.toLowerCase())
+-  );
++  const openDesign = (design) => {
++    notifyOpen('design', design.title);
++    navigate(`/editor/${design._id}`);
++  };
++
++  const filtered = designs.filter(d => d.title.toLowerCase().includes(search.toLowerCase()));
+ 
+   const timeAgo = (date) => {
+     const diff = Date.now() - new Date(date);
+@@ -121,96 +125,60 @@ const Dashboard = () => {
+   };
+ 
+   return (
+-    <motion.div variants={pageVariants} initial="initial" animate="animate" className="min-h-screen bg-dark-900">
++    <motion.div variants={pageV} initial="initial" animate="animate" className="min-h-screen bg-dark-900">
+ 
+-      {/* ── Top Nav ── */}
+-      <motion.nav
+-        variants={navVariants}
+-        initial="initial"
+-        animate="animate"
+-        className="bg-dark-800 border-b border-dark-600 px-6 py-3 flex items-center justify-between sticky top-0 z-50"
+-        style={{ backdropFilter: 'blur(16px)' }}
+-      >
+-        <motion.div className="flex items-center gap-3" whileHover={{ scale: 1.02 }}>
+-          <motion.div
+-            className="w-8 h-8 bg-accent rounded-lg flex items-center justify-center"
+-            animate={{ rotate: [0, 5, -5, 0] }}
+-            transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut' }}
+-          >
+-            <Layers size={16} />
++      {/* Nav */}
++      <nav className="bg-dark-800 border-b border-dark-600 px-6 py-3 flex items-center justify-between sticky top-0 z-50" style={{ backdropFilter:'blur(16px)' }}>
++        <div className="flex items-center gap-3">
++          <motion.button onClick={() => navigate('/hub')} className="tool-btn w-8 h-8" whileHover={{ scale:1.05 }} title="All Workspaces">
++            <ArrowLeft size={16} />
++          </motion.button>
++          <div className="w-px h-5 bg-dark-600" />
++          <motion.div className="flex items-center gap-2" whileHover={{ scale:1.02 }}>
++            <div className="w-8 h-8 bg-accent rounded-lg flex items-center justify-center">
++              <Layers size={16} />
++            </div>
++            <span className="font-bold text-lg tracking-tight">Design Studio</span>
+           </motion.div>
+-          <span className="font-bold text-lg tracking-tight">Synapse</span>
+-        </motion.div>
++        </div>
+ 
+-        <div className="flex-1 max-w-md mx-8">
+-          <motion.div className="relative" whileFocus={{ scale: 1.01 }}>
+-            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+-            <input
+-              value={search}
+-              onChange={e => setSearch(e.target.value)}
++        {/* Search */}
++        <div className="flex-1 max-w-sm mx-8">
++          <div className="relative">
++            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
++            <input value={search} onChange={e => setSearch(e.target.value)}
+               className="w-full bg-dark-700 border border-dark-500 rounded-lg pl-9 pr-4 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-accent"
+-              placeholder="Search designs..."
+-            />
+-          </motion.div>
++              placeholder="Search designs..." />
++          </div>
+         </div>
+ 
+         <div className="flex items-center gap-3">
+-          <motion.div
+-            className="flex items-center gap-2 bg-dark-700 px-3 py-2 rounded-lg"
+-            whileHover={{ background: '#2a2a2a' }}
+-          >
+-            <motion.div
+-              className="w-6 h-6 bg-accent rounded-full flex items-center justify-center text-xs font-bold"
+-              whileHover={{ scale: 1.1 }}
+-            >
++          <NotificationBell />
++          <div className="flex items-center gap-2 bg-dark-700 px-3 py-2 rounded-lg">
++            <div className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white" style={{ background:'linear-gradient(135deg,#6366f1,#8b5cf6)' }}>
+               {user?.name?.[0]?.toUpperCase()}
+-            </motion.div>
++            </div>
+             <span className="text-sm font-medium">{user?.name}</span>
+-          </motion.div>
+-          <motion.button
+-            onClick={() => navigate('/hub')}
+-            className="btn-secondary text-sm px-3 py-2"
+-            whileHover={{ scale: 1.03 }}
+-            whileTap={{ scale: 0.97 }}
+-            title="All Workspaces"
+-          >
+-            <LayoutGrid size={16} /> Workspaces
+-          </motion.button>
+-          <motion.button
+-            onClick={logout}
+-            className="btn-secondary text-sm px-3 py-2 text-red-400 hover:text-red-300"
+-            whileHover={{ scale: 1.03 }}
+-            whileTap={{ scale: 0.97 }}
+-          >
+-            <LogOut size={16} /> Sign out
+-          </motion.button>
++          </div>
++          <button onClick={logout} className="btn-secondary text-sm px-3 py-2 text-red-400 hover:text-red-300">
++            <LogOut size={15} /> Sign out
++          </button>
+         </div>
+-      </motion.nav>
++      </nav>
+ 
+       <div className="max-w-7xl mx-auto px-6 py-8">
+ 
+-        {/* ── Create Section ── */}
+-        <motion.div
+-          className="mb-10"
+-          custom={0}
+-          variants={sectionVariants}
+-          initial="initial"
+-          animate="animate"
+-        >
+-          <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-widest mb-4">
+-            Start Creating
+-          </h2>
++        {/* Create section */}
++        <motion.div className="mb-10" initial={{ opacity:0, y:20 }} animate={{ opacity:1, y:0 }} transition={{ duration:0.4 }}>
++          <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-4">Start Creating</h2>
+           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+-            {/* Blank canvas */}
+-            <motion.button
+-              onClick={() => createDesign()} disabled={creating}
+-              className="panel p-4 flex flex-col items-center gap-3 hover:border-accent transition-all duration-200 cursor-pointer group disabled:opacity-60"
+-              custom={0} variants={templateVariants} initial="initial" animate="animate"
+-              whileHover={{ scale: 1.03, boxShadow: '0 0 20px rgba(99,102,241,0.15)' }}
+-              whileTap={{ scale: 0.97 }}
++            <motion.button onClick={() => createDesign()} disabled={creating}
++              className="panel p-4 flex flex-col items-center gap-3 hover:border-accent transition-all cursor-pointer group disabled:opacity-60"
++              custom={0} variants={templateV} initial="initial" animate="animate"
++              whileHover={{ scale:1.03, boxShadow:'0 0 20px rgba(99,102,241,0.18)' }} whileTap={{ scale:0.97 }}
+             >
+               <div className="w-12 h-12 bg-accent/20 group-hover:bg-accent/30 rounded-xl flex items-center justify-center transition-colors">
+-                <Plus size={24} className="text-accent" />
++                <Plus size={22} className="text-accent" />
+               </div>
+               <div className="text-center">
+                 <p className="text-sm font-semibold">Blank Canvas</p>
+@@ -219,15 +187,13 @@ const Dashboard = () => {
+             </motion.button>
+ 
+             {TEMPLATES.map((t, i) => (
+-              <motion.button
+-                key={t.name} onClick={() => createDesign(t)} disabled={creating}
+-                className="panel p-4 flex flex-col items-center gap-3 hover:border-accent transition-all duration-200 cursor-pointer group disabled:opacity-60"
+-                custom={i + 1} variants={templateVariants} initial="initial" animate="animate"
+-                whileHover={{ scale: 1.03, boxShadow: '0 0 20px rgba(99,102,241,0.15)' }}
+-                whileTap={{ scale: 0.97 }}
++              <motion.button key={t.name} onClick={() => createDesign(t)} disabled={creating}
++                className="panel p-4 flex flex-col items-center gap-3 hover:border-accent transition-all cursor-pointer group disabled:opacity-60"
++                custom={i+1} variants={templateV} initial="initial" animate="animate"
++                whileHover={{ scale:1.03, boxShadow:'0 0 20px rgba(99,102,241,0.15)' }} whileTap={{ scale:0.97 }}
+               >
+                 <div className="w-12 h-12 bg-dark-600 group-hover:bg-dark-500 rounded-xl flex items-center justify-center text-2xl transition-colors">
+-                  {t.icon}
++                  {t.emoji}
+                 </div>
+                 <div className="text-center">
+                   <p className="text-sm font-semibold">{t.name}</p>
+@@ -238,132 +204,81 @@ const Dashboard = () => {
+           </div>
+         </motion.div>
+ 
+-        {/* ── Designs Grid ── */}
+-        <motion.div custom={0.15} variants={sectionVariants} initial="initial" animate="animate">
++        {/* Designs grid */}
++        <motion.div initial={{ opacity:0, y:16 }} animate={{ opacity:1, y:0 }} transition={{ delay:0.15 }}>
+           <div className="flex items-center justify-between mb-4">
+-            <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-widest">
+-              My Designs{filtered.length > 0 && <span className="text-gray-600 ml-1">({filtered.length})</span>}
++            <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-widest">
++              My Designs {filtered.length > 0 && <span className="text-gray-600 ml-1">({filtered.length})</span>}
+             </h2>
+-            <Grid size={16} className="text-gray-500" />
++            <Grid size={15} className="text-gray-600" />
+           </div>
+ 
+           {loading ? (
+             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+               {[...Array(8)].map((_, i) => (
+-                <motion.div
+-                  key={i}
+-                  className="panel aspect-video"
+-                  style={{ background: '#1a1a1a' }}
+-                  animate={{ opacity: [0.5, 1, 0.5] }}
+-                  transition={{ duration: 1.4, repeat: Infinity, delay: i * 0.08 }}
+-                />
++                <motion.div key={i} className="panel aspect-video" style={{ background:'#1a1a1a' }}
++                  animate={{ opacity:[0.4,0.9,0.4] }} transition={{ duration:1.4, repeat:Infinity, delay:i*0.08 }} />
+               ))}
+             </div>
+           ) : filtered.length === 0 ? (
+-            <motion.div
+-              initial={{ opacity: 0, y: 16 }}
+-              animate={{ opacity: 1, y: 0 }}
+-              className="text-center py-20 text-gray-500"
+-            >
+-              <Image size={48} className="mx-auto mb-4 opacity-30" />
++            <motion.div initial={{ opacity:0 }} animate={{ opacity:1 }} className="text-center py-20 text-gray-600">
++              <Image size={48} className="mx-auto mb-4 opacity-25" />
+               <p className="font-medium">{search ? 'No designs match your search' : 'No designs yet'}</p>
+               <p className="text-sm mt-1">Create your first design above</p>
+             </motion.div>
+           ) : (
+-            <motion.div
+-              variants={gridVariants}
+-              initial="initial"
+-              animate="animate"
++            <motion.div variants={gridV} initial="initial" animate="animate"
+               className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4"
+             >
+               <AnimatePresence>
+                 {filtered.map(design => (
+-                  <motion.div
+-                    key={design._id}
+-                    variants={cardVariants}
+-                    layout
+-                    exit="exit"
+-                    onClick={() => navigate(`/editor/${design._id}`)}
+-                    className="panel group cursor-pointer hover:border-accent transition-all duration-200 overflow-hidden"
+-                    whileHover={{ scale: 1.02, boxShadow: '0 4px 24px rgba(99,102,241,0.12)' }}
+-                    style={{ position: 'relative' }}
++                  <motion.div key={design._id} variants={cardV} layout exit="exit"
++                    onClick={() => openDesign(design)}
++                    className="panel cursor-pointer hover:border-accent transition-all duration-200 overflow-visible"
++                    whileHover={{ scale:1.025, boxShadow:'0 6px 28px rgba(99,102,241,0.14)' }}
++                    style={{ position:'relative' }}
+                   >
+                     {/* Thumbnail */}
+-                    <div className="aspect-video bg-dark-700 relative overflow-hidden">
+-                      {design.thumbnail ? (
+-                        <img src={design.thumbnail} alt={design.title} className="w-full h-full object-cover" />
+-                      ) : (
+-                        <div className="w-full h-full flex items-center justify-center">
+-                          <Edit3 size={24} className="text-dark-500" />
+-                        </div>
+-                      )}
+-                      {/* Hover overlay */}
+-                      <motion.div
+-                        className="absolute inset-0 bg-accent/10 flex items-center justify-center"
+-                        initial={{ opacity: 0 }}
+-                        whileHover={{ opacity: 1 }}
+-                      >
+-                        <span className="bg-accent text-white text-xs font-medium px-3 py-1 rounded-full">
+-                          Open
+-                        </span>
+-                      </motion.div>
++                    <div className="aspect-video bg-dark-700 relative overflow-hidden rounded-t-xl">
++                      {design.thumbnail
++                        ? <img src={design.thumbnail} alt={design.title} className="w-full h-full object-cover" />
++                        : <div className="w-full h-full flex items-center justify-center"><Edit3 size={22} className="text-dark-500" /></div>
++                      }
++                      <div className="absolute inset-0 bg-accent/10 opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center">
++                        <span className="bg-accent text-white text-xs font-medium px-3 py-1 rounded-full">Open</span>
++                      </div>
+                     </div>
+ 
+-                    {/* Info row */}
+-                    <div className="p-3 flex items-center justify-between">
+-                      <div className="flex-1 min-w-0">
+-                        <p className="text-sm font-medium truncate">{design.title}</p>
+-                        <div className="flex items-center gap-1 text-gray-500 text-xs mt-0.5">
+-                          <Clock size={10} /> {timeAgo(design.updatedAt)}
+-                        </div>
++                    {/* Info row — static buttons, always visible */}
++                    <div className="p-3">
++                      <p className="text-sm font-medium truncate mb-1">{design.title}</p>
++                      <div className="flex items-center gap-1 text-gray-500 text-xs mb-2">
++                        <Clock size={9} /> {timeAgo(design.updatedAt)}
+                       </div>
+-
+-                      {/* Context menu trigger */}
+-                      <div style={{ position: 'relative' }}>
++                      {/* Action buttons — ALWAYS VISIBLE */}
++                      <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
++                        {/* Analytics */}
+                         <motion.button
+-                          onClick={(e) => { e.stopPropagation(); setOpenMenu(openMenu === design._id ? null : design._id); }}
+-                          className="opacity-0 group-hover:opacity-100 p-1 text-gray-500 hover:text-white transition-all rounded"
+-                          whileHover={{ scale: 1.1 }}
+-                          whileTap={{ scale: 0.9 }}
++                          onClick={(e) => { e.stopPropagation(); setAnalyticsDesign(design); }}
++                          title="View Analytics"
++                          whileHover={{ scale:1.1 }} whileTap={{ scale:0.9 }}
++                          style={{ width:28, height:28, borderRadius:7, border:'none', background:'rgba(165,180,252,0.12)', color:'#a5b4fc', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', flexShrink:0 }}
+                         >
+-                          <MoreVertical size={14} />
++                          <BarChart2 size={13} />
+                         </motion.button>
+ 
+-                        {/* Dropdown menu */}
+-                        <AnimatePresence>
+-                          {openMenu === design._id && (
+-                            <motion.div
+-                              initial={{ opacity: 0, scale: 0.9, y: -4 }}
+-                              animate={{ opacity: 1, scale: 1, y: 0 }}
+-                              exit={{ opacity: 0, scale: 0.9, y: -4 }}
+-                              transition={{ duration: 0.15, ease: 'easeOut' }}
+-                              style={{
+-                                position: 'absolute', right: 0, top: '100%', zIndex: 50,
+-                                background: '#1a1a1a', border: '1px solid #333',
+-                                borderRadius: '10px', padding: '6px', minWidth: '160px',
+-                                boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+-                              }}
+-                              onClick={e => e.stopPropagation()}
+-                            >
+-                              <button
+-                                onClick={(e) => { e.stopPropagation(); setOpenMenu(null); setAnalyticsDesign(design); }}
+-                                style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', padding: '8px 10px', background: 'none', border: 'none', color: '#a5b4fc', fontSize: '13px', cursor: 'pointer', borderRadius: '7px' }}
+-                                onMouseEnter={e => e.currentTarget.style.background = '#252525'}
+-                                onMouseLeave={e => e.currentTarget.style.background = 'none'}
+-                              >
+-                                <BarChart2 size={14} /> View Analytics
+-                              </button>
+-                              <button
+-                                onClick={(e) => deleteDesign(design._id, e)}
+-                                style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', padding: '8px 10px', background: 'none', border: 'none', color: '#f87171', fontSize: '13px', cursor: 'pointer', borderRadius: '7px' }}
+-                                onMouseEnter={e => e.currentTarget.style.background = '#2a1515'}
+-                                onMouseLeave={e => e.currentTarget.style.background = 'none'}
+-                              >
+-                                <Trash2 size={14} /> Delete
+-                              </button>
+-                            </motion.div>
+-                          )}
+-                        </AnimatePresence>
++                        {/* Share */}
++                        <ShareBtn designId={design._id} title={design.title} />
++
++                        {/* Delete */}
++                        <motion.button
++                          onClick={(e) => deleteDesign(design._id, e)}
++                          title="Delete design"
++                          whileHover={{ scale:1.1 }} whileTap={{ scale:0.9 }}
++                          style={{ width:28, height:28, borderRadius:7, border:'none', background:'rgba(248,113,113,0.1)', color:'#f87171', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', flexShrink:0 }}
++                        >
++                          <Trash2 size={13} />
++                        </motion.button>
+                       </div>
+                     </div>
+                   </motion.div>
+@@ -374,13 +289,10 @@ const Dashboard = () => {
+         </motion.div>
+       </div>
+ 
+-      {/* ── Analytics Modal ── */}
++      {/* Analytics modal */}
+       <AnimatePresence>
+         {analyticsDesign && (
+-          <AnalyticsDashboard
+-            design={analyticsDesign}
+-            onClose={() => setAnalyticsDesign(null)}
+-          />
++          <AnalyticsDashboard design={analyticsDesign} onClose={() => setAnalyticsDesign(null)} />
+         )}
+       </AnimatePresence>
+     </motion.div>
+diff --git a/frontend/src/pages/DocsEditor.jsx b/frontend_new/src/pages/DocsEditor.jsx
+index 3894909..d65bdc2 100644
+--- a/frontend/src/pages/DocsEditor.jsx
++++ b/frontend_new/src/pages/DocsEditor.jsx
+@@ -1,19 +1,13 @@
+-import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
++import { useState, useRef, useEffect, useCallback } from 'react';
+ import { useNavigate } from 'react-router-dom';
+ import { useAuth } from '../context/AuthContext';
+ import toast from 'react-hot-toast';
+-import { useEditor, EditorContent } from "@tiptap/react";
+-import StarterKit from "@tiptap/starter-kit";
+-import Collaboration from "@tiptap/extension-collaboration";
+-import CollaborationCursor from "@tiptap/extension-collaboration-cursor";
+-import { usePresence } from '../hooks/usePresence';
+-import PresenceNav from '../components/PresenceNav';
+-
+ import {
+   ArrowLeft, Plus, Trash2, Save, Download, FileText,
+   Bold, Italic, Underline, AlignLeft, AlignCenter, AlignRight,
+-  List, Search, Share2,
++  List, Type, Search, Share2, Check,
+ } from 'lucide-react';
++import { useNotify, NotificationBell } from '../components/NotificationSystem';
+ 
+ /* ─── helpers ─────────────────────────────────────────────────────────────── */
+ const STORAGE_KEY = 'synapse_docs';
+@@ -36,141 +30,48 @@ const TB = ({ title, onClick, active, children }) => (
+   >{children}</button>
+ );
+ 
+-/* ─── Editor Component ───────────────────────────────────────────────────── */
+-function TiptapRoom({ id, title, setTitle, persist, ydoc, provider, localUser, status }) {
+-
+-  const editor = useEditor({
+-    extensions: provider ? [
+-      StarterKit.configure({ history: false }),
+-      Collaboration.configure({ document: ydoc }),
+-      CollaborationCursor.configure({
+-        provider: provider,
+-        user: localUser,
+-      }),
+-    ] : [],
+-    content: "",
+-    editable: true,
+-  }, [provider]);
+-
+-  if (!editor || !provider) return <div className="p-12 text-gray-400">Loading editor...</div>;
+-
+-  const exportTXT = () => {
+-    const text = editor.getText();
+-    const blob = new Blob([`${title}\n\n${text}`], { type: 'text/plain' });
+-    const url  = URL.createObjectURL(blob);
+-    const a    = document.createElement('a'); a.href = url; a.download = `${title}.txt`; a.click();
+-    URL.revokeObjectURL(url);
+-    toast.success('Exported as TXT!');
+-  };
+-
+-  const shareRoom = () => {
+-    const link = `${window.location.origin}/docs?room=${id}`;
+-    navigator.clipboard.writeText(link);
+-    toast.success('Workspace link copied to clipboard!');
+-  };
+-
+-  return (
+-    <div className="flex-1 flex flex-col overflow-hidden bg-dark-950">
+-      {/* Action Bar (Save/Export/Share) */}
+-      <div className="absolute top-2 right-4 flex items-center gap-2 z-50">
+-        <span className="text-xs flex items-center px-2 mr-2" style={{color: status === "connected" ? "#4ade80" : "#fbbf24"}}>
+-          {status === "connected" ? "● Connected" : "● Reconnecting..."}
+-        </span>
+-        <button onClick={shareRoom} className="btn-primary text-xs px-3 py-1.5 h-8 bg-indigo-600 hover:bg-indigo-500 flex items-center gap-1"><Share2 size={13}/> Share</button>
+-        <button onClick={exportTXT}  className="btn-secondary text-xs px-3 py-1.5 h-8"><Download size={13}/> TXT</button>
+-        <button onClick={() => persist(false)} className="btn-primary text-xs px-3 py-1.5 h-8"><Save size={13}/> Save</button>
+-      </div>
+-
+-      {/* Formatting toolbar */}
+-      <div className="h-10 bg-dark-800 border-b border-dark-600 flex items-center px-4 gap-1 shrink-0 mt-2">
+-        <select onChange={e => {
+-            if(e.target.value === "") editor.chain().focus().setParagraph().run();
+-            else editor.chain().focus().toggleHeading({ level: parseInt(e.target.value) }).run();
+-          }} 
+-          className="bg-dark-700 border border-dark-600 text-gray-300 text-xs rounded px-2 py-1 mr-2 focus:outline-none">
+-          <option value="">Normal</option>
+-          <option value="1">Heading 1</option>
+-          <option value="2">Heading 2</option>
+-          <option value="3">Heading 3</option>
+-        </select>
+-        <div className="w-px h-5 bg-dark-600 mx-1" />
+-        <TB title="Bold"   active={editor.isActive('bold')}   onClick={()=>editor.chain().focus().toggleBold().run()}><Bold size={13}/></TB>
+-        <TB title="Italic" active={editor.isActive('italic')} onClick={()=>editor.chain().focus().toggleItalic().run()}><Italic size={13}/></TB>
+-        <TB title="Bullet list" active={editor.isActive('bulletList')} onClick={()=>editor.chain().focus().toggleBulletList().run()}><List size={13}/></TB>
+-      </div>
+-
+-      {/* Document title */}
+-      <div className="px-12 pt-10 pb-4 bg-dark-950">
+-        <input value={title} onChange={e=>setTitle(e.target.value)}
+-          placeholder="Document title…"
+-          className="w-full bg-transparent text-3xl font-bold text-white focus:outline-none placeholder-gray-700"
+-          style={{ fontFamily:'Inter,sans-serif', letterSpacing:'-0.5px' }} />
+-      </div>
+-
+-      {/* Content area */}
+-      <div className="flex-1 overflow-y-auto px-12 pb-16 tiptap-wrapper">
+-        <EditorContent editor={editor} style={{ minHeight: 400, outline: 'none', fontSize: 15, lineHeight: 1.8, color: '#d1d5db' }}  />
+-      </div>
+-
+-      <style>{`
+-        .tiptap-wrapper .ProseMirror:focus { outline: none; }
+-        .tiptap-wrapper h1 { font-size:26px; font-weight:700; color:#fff; margin:16px 0 8px; }
+-        .tiptap-wrapper h2 { font-size:20px; font-weight:600; color:#e5e7eb; margin:14px 0 6px; }
+-        .tiptap-wrapper h3 { font-size:16px; font-weight:600; color:#d1d5db; margin:12px 0 4px; }
+-        .tiptap-wrapper ul { padding-left:24px; margin:8px 0; list-style-type: disc; }
+-        .tiptap-wrapper p.is-editor-empty:first-child::before {
+-          content: 'Start writing collaboratively…'; color: #374151; float: left; height: 0; pointer-events: none;
+-        }
+-        /* Cursor styles for collaboration */
+-        .collaboration-cursor__caret { position: relative; margin-left: -1px; margin-right: -1px; border-left: 2px solid #0D0D0D; word-break: normal; pointer-events: none; }
+-        .collaboration-cursor__label { position: absolute; top: -1.4em; left: -1px; font-size: 12px; font-style: normal; font-weight: 600; line-height: normal; white-space: nowrap; border-radius: 4px; padding: 2px 6px; pointer-events: none; }
+-      `}</style>
+-    </div>
+-  );
+-}
+-
+ /* ─── DocsEditor ─────────────────────────────────────────────────────────── */
+ export default function DocsEditor() {
+   const navigate = useNavigate();
+-  const { logout } = useAuth();
++  const { user, logout } = useAuth();
++  const editorRef = useRef(null);
++  const autoRef   = useRef(null);
+ 
+-  const [docs, setDocs] = useState(loadDocs);
+-  const [activeId, setActiveId] = useState(null);
+-  const [search, setSearch] = useState('');
+-  
+-  // Local state for active document title
+-  const [title, setTitle] = useState('');
++  const [docs,       setDocs]       = useState(loadDocs);
++  const [activeId,   setActiveId]   = useState(null);
++  const [search,     setSearch]     = useState('');
++  const [title,      setTitle]      = useState('');
++  const [wordCount,  setWordCount]  = useState(0);
++  const [copied,     setCopied]     = useState(false);
++  const { notifyOpen } = useNotify();
+ 
+   const activeDoc = docs.find(d => d.id === activeId);
+-  const { presence, notifications, ydoc, provider, localUser, status } = usePresence(activeId ? `docs-${activeId}` : null);
+ 
+-  // Auto-join shared link via URL '?room=xyz'
+   useEffect(() => {
+-    const searchParams = new URLSearchParams(window.location.search);
+-    const roomParam = searchParams.get('room');
+-    if (roomParam) {
+-      const existing = docs.find(d => d.id === roomParam);
+-      if (!existing) {
+-        const d = { id: roomParam, title: 'Shared Document', content: '', updatedAt: Date.now() };
+-        const updated = [d, ...docs];
+-        setDocs(updated);
+-        saveDocs(updated);
+-        setTitle('Shared Document');
+-      } else {
+-        setTitle(existing.title);
+-      }
+-      setActiveId(roomParam);
+-      window.history.replaceState(null, '', window.location.pathname);
+-      toast.success('Joined remote workspace!');
++    if (editorRef.current && activeDoc) {
++      editorRef.current.innerHTML = activeDoc.content;
++      countWords();
+     }
+-  }, [docs]);
++  // eslint-disable-next-line react-hooks/exhaustive-deps
++  }, [activeId]);
++
++  const countWords = () => {
++    const text = editorRef.current?.innerText || '';
++    setWordCount(text.trim() ? text.trim().split(/\s+/).length : 0);
++  };
++
++  const autoSave = () => {
++    clearTimeout(autoRef.current);
++    autoRef.current = setTimeout(() => persist(true), 1500);
++  };
+ 
+   const persist = useCallback((silent = false) => {
+-    if (!activeId) return;
+-    const updated = docs.map(d => d.id === activeId ? { ...d, title, updatedAt: Date.now() } : d);
++    if (!activeId || !editorRef.current) return;
++    const content = editorRef.current.innerHTML;
++    const updated = docs.map(d => d.id === activeId ? { ...d, title, content, updatedAt: Date.now() } : d);
+     setDocs(updated);
+     saveDocs(updated);
+-    if (!silent) toast.success('Saved title metadata!');
++    if (!silent) toast.success('Saved! ✓');
+   }, [activeId, title, docs]);
+ 
+   const createDoc = () => {
+@@ -184,7 +85,7 @@ export default function DocsEditor() {
+ 
+   const deleteDoc = (id, e) => {
+     e.stopPropagation();
+-    if (!window.confirm('Delete this document from local list?')) return;
++    if (!confirm('Delete this document?')) return;
+     const updated = docs.filter(d => d.id !== id);
+     setDocs(updated);
+     saveDocs(updated);
+@@ -193,30 +94,80 @@ export default function DocsEditor() {
+   };
+ 
+   const openDoc = (d) => {
+-    // save current title before switching
+-    if (activeId) {
+-      persist(true);
++    notifyOpen('docs', d.title);
++    // save current before switching
++    if (activeId && editorRef.current) {
++      const content = editorRef.current.innerHTML;
++      const updated = docs.map(x => x.id === activeId ? { ...x, title, content, updatedAt: Date.now() } : x);
++      setDocs(updated);
++      saveDocs(updated);
+     }
+     setActiveId(d.id);
+     setTitle(d.title);
+   };
+ 
++  const cmd = (command, value = null) => {
++    document.execCommand(command, false, value);
++    editorRef.current?.focus();
++  };
++
++  const exportTXT = () => {
++    const text = editorRef.current?.innerText || '';
++    const blob = new Blob([`${title}\n\n${text}`], { type: 'text/plain' });
++    const url  = URL.createObjectURL(blob);
++    const a    = document.createElement('a'); a.href = url; a.download = `${title}.txt`; a.click();
++    URL.revokeObjectURL(url);
++    toast.success('Exported as TXT!');
++  };
++
++  const exportDOC = () => {
++    const content = editorRef.current?.innerHTML || '';
++    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>${title}</title><style>body{margin:40px;font-family:Arial;font-size:14px;line-height:1.7;color:#111}h1,h2,h3{color:#111}</style></head><body><h1>${title}</h1>${content}<p style="color:#999;font-size:11px;margin-top:40px">Created with Synapse Docs — ${new Date().toLocaleDateString()}</p></body></html>`;
++    const blob = new Blob([html], { type: 'application/msword' });
++    const url  = URL.createObjectURL(blob);
++    const a    = document.createElement('a'); a.href = url; a.download = `${title}.doc`; a.click();
++    URL.revokeObjectURL(url);
++    toast.success('Exported as DOC!');
++  };
++
+   const filtered = docs.filter(d => d.title.toLowerCase().includes(search.toLowerCase()));
+ 
+   return (
+-    <div className="h-screen bg-dark-900 flex flex-col overflow-hidden relative">
++    <div className="h-screen bg-dark-900 flex flex-col overflow-hidden">
++
+       {/* Nav */}
+       <nav className="h-12 bg-dark-800 border-b border-dark-600 flex items-center px-4 gap-3 shrink-0 z-50">
+         <button onClick={() => navigate('/hub')} className="tool-btn"><ArrowLeft size={16} /></button>
+         <div className="w-px h-6 bg-dark-600" />
+-        <span className="font-bold text-sm">📝 Synapse Docs - Live Collaboration</span>
++        <span className="font-bold text-sm">📝 Synapse Docs</span>
+         <div className="flex-1" />
+-        <PresenceNav presence={presence} notifications={notifications} />
+-        <div className="w-px h-6 bg-dark-600 mx-2" />
++        {activeDoc && (
++          <>
++            <span className="text-xs text-gray-500">{wordCount} words</span>
++            <button onClick={exportTXT}  className="btn-secondary text-xs px-3 py-1.5 h-8"><Download size={13}/> TXT</button>
++            <button onClick={exportDOC}  className="btn-secondary text-xs px-3 py-1.5 h-8"><FileText size={13}/> DOC</button>
++            <button onClick={() => persist(false)} className="btn-primary text-xs px-3 py-1.5 h-8"><Save size={13}/> Save</button>
++            {activeDoc && (
++              <button onClick={() => {
++                const url = `${window.location.origin}/docs`;
++                navigator.clipboard.writeText(url).catch(()=>{});
++                setCopied(true); setTimeout(()=>setCopied(false),2000);
++                if(typeof toast !== 'undefined') toast.success('Link copied!');
++              }}
++                className="btn-secondary text-xs px-3 py-1.5 h-8"
++                style={{ color: copied ? '#22c55e' : undefined }}
++              >
++                {copied ? <Check size={13}/> : <Share2 size={13}/>} {copied ? 'Copied!' : 'Share'}
++              </button>
++            )}
++          </>
++        )}
++        <NotificationBell />
+         <button onClick={logout} className="text-gray-500 hover:text-red-400 text-xs ml-2">Sign out</button>
+       </nav>
+ 
+-      <div className="flex flex-1 overflow-hidden relative">
++      <div className="flex flex-1 overflow-hidden">
++
+         {/* ── Sidebar ── */}
+         <aside className="w-60 bg-dark-800 border-r border-dark-600 flex flex-col shrink-0">
+           <div className="p-3 border-b border-dark-600 flex gap-2">
+@@ -255,17 +206,61 @@ export default function DocsEditor() {
+ 
+         {/* ── Editor area ── */}
+         {activeDoc ? (
+-          <TiptapRoom 
+-            key={activeId} 
+-            id={activeId} 
+-            title={title} 
+-            setTitle={setTitle}
+-            persist={persist} 
+-            ydoc={ydoc}
+-            provider={provider}
+-            localUser={localUser}
+-            status={status}
+-          />
++          <div className="flex-1 flex flex-col overflow-hidden bg-dark-950">
++
++            {/* Formatting toolbar */}
++            <div className="h-10 bg-dark-800 border-b border-dark-600 flex items-center px-4 gap-1 shrink-0">
++              {/* Heading */}
++              <select onChange={e => cmd('formatBlock', e.target.value)} defaultValue=""
++                className="bg-dark-700 border border-dark-600 text-gray-300 text-xs rounded px-2 py-1 mr-2 focus:outline-none">
++                <option value="">Normal</option>
++                <option value="h1">Heading 1</option>
++                <option value="h2">Heading 2</option>
++                <option value="h3">Heading 3</option>
++              </select>
++
++              <div className="w-px h-5 bg-dark-600 mx-1" />
++              <TB title="Bold"      onClick={()=>cmd('bold')}          ><Bold size={13}/></TB>
++              <TB title="Italic"    onClick={()=>cmd('italic')}        ><Italic size={13}/></TB>
++              <TB title="Underline" onClick={()=>cmd('underline')}     ><Underline size={13}/></TB>
++              <div className="w-px h-5 bg-dark-600 mx-1" />
++              <TB title="Align Left"   onClick={()=>cmd('justifyLeft')}  ><AlignLeft size={13}/></TB>
++              <TB title="Align Center" onClick={()=>cmd('justifyCenter')}><AlignCenter size={13}/></TB>
++              <TB title="Align Right"  onClick={()=>cmd('justifyRight')} ><AlignRight size={13}/></TB>
++              <div className="w-px h-5 bg-dark-600 mx-1" />
++              <TB title="Bullet list" onClick={()=>cmd('insertUnorderedList')}><List size={13}/></TB>
++              <TB title="Font size +" onClick={()=>cmd('fontSize', '5')}><span className="text-xs font-bold">A+</span></TB>
++              <TB title="Font size -" onClick={()=>cmd('fontSize', '2')}><span className="text-xs">A-</span></TB>
++              <div className="w-px h-5 bg-dark-600 mx-1" />
++              <input type="color" title="Text color" defaultValue="#ffffff"
++                onChange={e=>cmd('foreColor', e.target.value)}
++                className="w-7 h-7 rounded cursor-pointer bg-transparent border-0 p-0.5" />
++            </div>
++
++            {/* Document title */}
++            <div className="px-12 pt-10 pb-4 bg-dark-950">
++              <input value={title} onChange={e=>setTitle(e.target.value)} onBlur={()=>autoSave()}
++                placeholder="Document title…"
++                className="w-full bg-transparent text-3xl font-bold text-white focus:outline-none placeholder-gray-700"
++                style={{ fontFamily:'Inter,sans-serif', letterSpacing:'-0.5px' }} />
++            </div>
++
++            {/* Content area */}
++            <div className="flex-1 overflow-y-auto px-12 pb-16">
++              <div
++                ref={editorRef}
++                contentEditable
++                suppressContentEditableWarning
++                onInput={() => { autoSave(); countWords(); }}
++                style={{
++                  minHeight: 400, outline: 'none',
++                  fontSize: 15, lineHeight: 1.8, color: '#d1d5db',
++                  fontFamily: 'Inter, sans-serif',
++                }}
++                data-placeholder="Start writing…"
++              />
++            </div>
++          </div>
+         ) : (
+           <div className="flex-1 flex items-center justify-center bg-dark-950 text-gray-600 flex-col gap-4">
+             <FileText size={64} className="opacity-20" />
+@@ -274,6 +269,15 @@ export default function DocsEditor() {
+           </div>
+         )}
+       </div>
++
++      <style>{`
++        [contenteditable]:empty:before { content: attr(data-placeholder); color: #374151; pointer-events:none; }
++        [contenteditable] h1 { font-size:26px; font-weight:700; color:#fff; margin:16px 0 8px; }
++        [contenteditable] h2 { font-size:20px; font-weight:600; color:#e5e7eb; margin:14px 0 6px; }
++        [contenteditable] h3 { font-size:16px; font-weight:600; color:#d1d5db; margin:12px 0 4px; }
++        [contenteditable] ul,ol { padding-left:24px; margin:8px 0; }
++        [contenteditable] li { margin:4px 0; }
++      `}</style>
+     </div>
+   );
+ }
+diff --git a/frontend/src/pages/Editor.jsx b/frontend_new/src/pages/Editor.jsx
+index a1327f3..ac9791c 100644
+--- a/frontend/src/pages/Editor.jsx
++++ b/frontend_new/src/pages/Editor.jsx
+@@ -1,717 +1,646 @@
+-import { useState, useEffect, useRef } from 'react';
++import { useState, useEffect, useRef, useCallback } from 'react';
+ import { useParams, useNavigate } from 'react-router-dom';
+ import * as fabric from 'fabric';
+ import api from '../api/axios';
+ import toast from 'react-hot-toast';
+-import { HocuspocusProvider } from "@hocuspocus/provider";
+-import * as Y from "yjs";
+ import {
+   ArrowLeft, Save, Download, Trash2, Type, Square, Circle,
+   Minus, Image as ImageIcon, MousePointer, Triangle,
+   AlignLeft, AlignCenter, AlignRight,
+   ZoomIn, ZoomOut, Layers, Copy,
+-  ChevronUp, ChevronDown, Pencil, Share2,
++  ChevronUp, ChevronDown, Pencil, Star,
++  MessageSquarePlus, X, Lock, Unlock, Eye, EyeOff,
++  FlipHorizontal, FlipVertical, RotateCcw, Grid,
++  MoveUp, MoveDown, ArrowUpToLine, ArrowDownToLine,
+ } from 'lucide-react';
+ 
+-const envWsUrl = import.meta.env.VITE_WS_URL || '';
+-const WS_URL = envWsUrl.includes('localhost')
+-  ? envWsUrl.replace('localhost', window.location.hostname)
+-  : (envWsUrl || `ws://${window.location.hostname}:1234`);
+-
+-const COLORS = [
+-  '#ffffff','#000000','#ef4444','#f97316','#eab308',
+-  '#22c55e','#3b82f6','#8b5cf6','#ec4899','#14b8a6',
+-  '#f1f5f9','#94a3b8','#64748b','#334155','#0f172a',
++const COLORS = ['#ffffff','#000000','#ef4444','#f97316','#eab308','#22c55e','#3b82f6','#8b5cf6','#ec4899','#14b8a6','#f1f5f9','#94a3b8','#64748b','#334155','#0f172a'];
++const FONTS  = ['Inter','Arial','Georgia','Times New Roman','Courier New','Verdana','Trebuchet MS','Comic Sans MS','Impact','Palatino'];
++const GRADIENTS = [
++  { name:'Purple', stops:[{color:'#6366f1',offset:0},{color:'#8b5cf6',offset:1}] },
++  { name:'Sunset', stops:[{color:'#f97316',offset:0},{color:'#ec4899',offset:1}] },
++  { name:'Ocean',  stops:[{color:'#0ea5e9',offset:0},{color:'#22c55e',offset:1}] },
++  { name:'Fire',   stops:[{color:'#ef4444',offset:0},{color:'#f97316',offset:1}] },
++  { name:'Gold',   stops:[{color:'#eab308',offset:0},{color:'#f97316',offset:1}] },
++  { name:'Mint',   stops:[{color:'#22c55e',offset:0},{color:'#14b8a6',offset:1}] },
+ ];
+-
+-/* ─── Export Dropdown ─────────────────────────────────────────────────────── */
+-const ExportDropdown = ({ onExport }) => {
+-  const [open, setOpen] = useState(false);
+-  const ref = useRef(null);
+-
+-  useEffect(() => {
+-    const h = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+-    document.addEventListener('mousedown', h);
+-    return () => document.removeEventListener('mousedown', h);
+-  }, []);
+-
+-  const options = [
+-    { id: 'png', label: 'Export as PNG',  sub: 'High-quality image',        icon: '🖼️' },
+-    { id: 'pdf', label: 'Export as PDF',  sub: 'Portable document',          icon: '📄' },
+-    { id: 'doc', label: 'Export as DOC',  sub: 'Word document',              icon: '📝' },
+-    { id: 'zip', label: 'Download ZIP',   sub: 'Canvas data + PNG bundle',   icon: '📦' },
+-  ];
+-
++const EMOJIS = ['🎨','✨','🎯','🔥','💫','⭐','🎭','🌟','💎','🚀','🦋','🌈','🎪','🎠','🎡','🍀','🌸','🦄','💥','🎆'];
++
++/* ─── Emoji Splasher ─────────────────────────────────────────────────────── */
++let eid = 0;
++function EmojiSplasher() {
++  const [bursts,setBursts] = useState([]);
++  useEffect(()=>{
++    const h=(e)=>{
++      if(e.target.closest('header')||e.target.closest('aside')) return;
++      const id=++eid; const cnt=8+Math.floor(Math.random()*7);
++      const particles=Array.from({length:cnt},(_,i)=>({
++        id:i,emoji:EMOJIS[Math.floor(Math.random()*EMOJIS.length)],
++        angle:(360/cnt)*i+(Math.random()-0.5)*25,
++        dist:70+Math.random()*110,size:16+Math.random()*18,
++        dur:550+Math.random()*500,delay:Math.random()*70,
++      }));
++      setBursts(p=>[...p,{id,x:e.clientX,y:e.clientY,particles}]);
++      setTimeout(()=>setBursts(p=>p.filter(b=>b.id!==id)),1600);
++    };
++    document.addEventListener('dblclick',h);
++    return ()=>document.removeEventListener('dblclick',h);
++  },[]);
+   return (
+-    <div ref={ref} style={{ position: 'relative' }}>
+-      <button
+-        onClick={() => setOpen(o => !o)}
+-        className="btn-primary text-sm px-3 py-1.5 h-8"
+-        style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+-      >
+-        <Download size={14} /> Export
+-        <svg width="10" height="10" viewBox="0 0 10 10" style={{ marginLeft: 2, opacity: 0.7, transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }}>
+-          <path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
+-        </svg>
+-      </button>
+-
+-      {open && (
+-        <div style={{
+-          position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 9999,
+-          background: '#141414', border: '1px solid #2a2a2a', borderRadius: 12,
+-          padding: 6, minWidth: 220, boxShadow: '0 12px 40px rgba(0,0,0,.6)',
+-          animation: 'dropIn .15s ease',
+-        }}>
+-          {options.map(opt => (
+-            <button key={opt.id}
+-              onClick={() => { onExport(opt.id); setOpen(false); }}
+-              style={{
+-                display: 'flex', alignItems: 'center', gap: 10,
+-                width: '100%', padding: '10px 12px', background: 'none',
+-                border: 'none', borderRadius: 8, color: '#e5e7eb',
+-                cursor: 'pointer', textAlign: 'left', transition: 'background .12s',
+-              }}
+-              onMouseEnter={e => e.currentTarget.style.background = '#1e1e1e'}
+-              onMouseLeave={e => e.currentTarget.style.background = 'none'}
+-            >
+-              <span style={{ fontSize: 18, width: 24, textAlign: 'center' }}>{opt.icon}</span>
+-              <div>
+-                <p style={{ fontSize: 13, fontWeight: 500, color: '#fff', lineHeight: 1.2 }}>{opt.label}</p>
+-                <p style={{ fontSize: 11, color: '#555', marginTop: 2 }}>{opt.sub}</p>
++    <div style={{position:'fixed',inset:0,pointerEvents:'none',zIndex:99999}}>
++      {bursts.map(b=>(
++        <div key={b.id} style={{position:'absolute',left:b.x,top:b.y}}>
++          {b.particles.map(p=>{
++            const r=(p.angle*Math.PI)/180;
++            return (
++              <div key={p.id} style={{position:'absolute',fontSize:p.size,lineHeight:1,transform:'translate(-50%,-50%)',animation:`ePop ${p.dur}ms ${p.delay}ms cubic-bezier(.2,.8,.4,1) forwards`,'--tx':`${Math.cos(r)*p.dist}px`,'--ty':`${Math.sin(r)*p.dist}px`,userSelect:'none'}}>
++                {p.emoji}
+               </div>
+-            </button>
+-          ))}
++            );
++          })}
+         </div>
+-      )}
+-      <style>{`@keyframes dropIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}`}</style>
++      ))}
++      <style>{`@keyframes ePop{0%{transform:translate(-50%,-50%) scale(0) rotate(0deg);opacity:1}40%{transform:translate(calc(-50% + var(--tx)*.6),calc(-50% + var(--ty)*.6)) scale(1.3) rotate(180deg);opacity:1}100%{transform:translate(calc(-50% + var(--tx)),calc(-50% + var(--ty))) scale(0.3) rotate(360deg);opacity:0}}`}</style>
++    </div>
++  );
++}
++
++/* ─── Export Dropdown ──────────────────────────────────────────────────────── */
++const ExportDropdown=({onExport})=>{
++  const [open,setOpen]=useState(false);const ref=useRef(null);
++  useEffect(()=>{const h=(e)=>{if(ref.current&&!ref.current.contains(e.target))setOpen(false)};document.addEventListener('mousedown',h);return()=>document.removeEventListener('mousedown',h)},[]);
++  const opts=[{id:'png',label:'Export as PNG',sub:'High-quality image',icon:'🖼️'},{id:'pdf',label:'Export as PDF',sub:'Portable document',icon:'📄'},{id:'doc',label:'Export as DOC',sub:'Word document',icon:'📝'},{id:'zip',label:'Download ZIP',sub:'Canvas + PNG bundle',icon:'📦'}];
++  return(
++    <div ref={ref} style={{position:'relative'}}>
++      <button onClick={()=>setOpen(o=>!o)} className="btn-primary text-sm px-3 py-1.5 h-8" style={{display:'flex',alignItems:'center',gap:6}}>
++        <Download size={14}/> Export
++        <svg width="10" height="10" viewBox="0 0 10 10" style={{marginLeft:2,opacity:.7,transform:open?'rotate(180deg)':'none',transition:'transform .15s'}}><path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
++      </button>
++      {open&&(<div style={{position:'absolute',top:'calc(100% + 6px)',right:0,zIndex:9999,background:'#141414',border:'1px solid #2a2a2a',borderRadius:12,padding:6,minWidth:220,boxShadow:'0 12px 40px rgba(0,0,0,.6)',animation:'dIn .15s ease'}}>
++        {opts.map(o=><button key={o.id} onClick={()=>{onExport(o.id);setOpen(false)}} style={{display:'flex',alignItems:'center',gap:10,width:'100%',padding:'10px 12px',background:'none',border:'none',borderRadius:8,color:'#e5e7eb',cursor:'pointer',textAlign:'left',transition:'background .12s'}} onMouseEnter={e=>e.currentTarget.style.background='#1e1e1e'} onMouseLeave={e=>e.currentTarget.style.background='none'}><span style={{fontSize:18,width:24,textAlign:'center'}}>{o.icon}</span><div><p style={{fontSize:13,fontWeight:500,color:'#fff',lineHeight:1.2}}>{o.label}</p><p style={{fontSize:11,color:'#555',marginTop:2}}>{o.sub}</p></div></button>)}
++      </div>)}
++      <style>{`@keyframes dIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}`}</style>
+     </div>
+   );
+ };
+ 
+-/* ─── Editor ──────────────────────────────────────────────────────────────── */
+-const Editor = () => {
+-  const { id } = useParams();
+-  const navigate = useNavigate();
+-  const canvasRef   = useRef(null);
+-  const fabricRef   = useRef(null);
+-  const wrapperRef  = useRef(null);            // ← ref for wheel handler
+-  const designRef   = useRef(null);            // ← persist design dims for zoom
+-  const autoSaveTimer = useRef(null);
+-
+-  const [design,      setDesign]      = useState(null);
+-  const [activeTool,  setActiveTool]  = useState('select');
+-  const [activeObj,   setActiveObj]   = useState(null);
+-  const [saving,      setSaving]      = useState(false);
+-  const [zoom,        setZoom]        = useState(100);
+-  const [fillColor,   setFillColor]   = useState('#6366f1');
+-  const [strokeColor, setStrokeColor] = useState('#ffffff');
+-  const [strokeWidth, setStrokeWidth] = useState(2);
+-  const [fontSize,    setFontSize]    = useState(24);
+-  const [fontWeight,  setFontWeight]  = useState('normal');
+-  const [title,       setTitle]       = useState('Untitled Design');
+-  const [sidePanel,   setSidePanel]   = useState('properties');
+-
+-  const [status, setStatus] = useState('connecting');
+-  const ydocRef = useRef(new Y.Doc());
+-  const providerRef = useRef(null);
+-  const isRemoteUpdate = useRef(false);
+-
+-  /* ── Yjs Collaboration Setup ── */
+-  useEffect(() => {
+-    const provider = new HocuspocusProvider({
+-      url: WS_URL,
+-      name: `canvas-${id}`,
+-      document: ydocRef.current,
+-      onStatus: ({ status }) => setStatus(status),
+-    });
+-    providerRef.current = provider;
+-
+-    const ymap = ydocRef.current.getMap('canvas');
+-    ymap.observe((event) => {
+-      if (event.keysChanged.has('data')) {
+-        const newData = ymap.get('data');
+-        if (newData && fabricRef.current) {
+-          isRemoteUpdate.current = true;
+-          try {
+-            fabricRef.current.loadFromJSON(newData, () => {
+-              fabricRef.current.renderAll();
+-              isRemoteUpdate.current = false;
+-            });
+-          } catch(e) {
+-            isRemoteUpdate.current = false;
+-          }
+-        }
+-      }
+-    });
+-
+-    return () => {
+-      provider.destroy();
+-    };
+-  }, [id]);
+-
+-  const syncState = () => {
+-    if (isRemoteUpdate.current || !fabricRef.current) return;
+-    const ymap = ydocRef.current.getMap('canvas');
+-    ymap.set('data', JSON.stringify(fabricRef.current.toJSON()));
+-  };
+-
+-  /* ── Prevent browser page-zoom inside the editor ── */
+-  useEffect(() => {
+-    const block = (e) => { if (e.ctrlKey || e.metaKey) e.preventDefault(); };
+-    document.addEventListener('wheel', block, { passive: false });
+-    return () => document.removeEventListener('wheel', block);
+-  }, []);
+-
+-  /* ── Canvas-wrapper wheel → canvas zoom ── */
+-  useEffect(() => {
+-    const el = wrapperRef.current;
+-    if (!el) return;
+-    const onWheel = (e) => {
+-      e.preventDefault();
+-      if (!fabricRef.current || !designRef.current) return;
+-      applyZoomDelta(e.deltaY < 0 ? 10 : -10);
++/* ─── Comment Pin ──────────────────────────────────────────────────────────── */
++const CommentPin=({comment,onClick})=>(
++  <div onClick={()=>onClick(comment)} title={comment.text} style={{position:'absolute',left:comment.x,top:comment.y,width:26,height:26,borderRadius:'50% 50% 50% 0',background:'#6366f1',border:'2px solid #fff',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',transform:'rotate(-45deg)',zIndex:100,boxShadow:'0 2px 8px rgba(0,0,0,.5)',transition:'transform .15s',fontSize:10}}
++    onMouseEnter={e=>e.currentTarget.style.transform='rotate(-45deg) scale(1.25)'}
++    onMouseLeave={e=>e.currentTarget.style.transform='rotate(-45deg) scale(1)'}
++  ><span style={{transform:'rotate(45deg)'}}>💬</span></div>
++);
++
++/* ─── Editor ───────────────────────────────────────────────────────────────── */
++const Editor=()=>{
++  const {id}=useParams(); const navigate=useNavigate();
++  const canvasRef=useRef(null); const fabricRef=useRef(null);
++  const wrapperRef=useRef(null); const designRef=useRef(null);
++  const autoSaveTimer=useRef(null); const commentInputRef=useRef(null);
++
++  const [design,setDesign]=useState(null);
++  const [activeTool,setActiveTool]=useState('select');
++  const [activeObj,setActiveObj]=useState(null);
++  const [saving,setSaving]=useState(false);
++  const [zoom,setZoom]=useState(100);
++  const [fillColor,setFillColor]=useState('#6366f1');
++  const [strokeColor,setStrokeColor]=useState('#ffffff');
++  const [strokeWidth,setStrokeWidth]=useState(2);
++  const [fontSize,setFontSize]=useState(24);
++  const [fontWeight,setFontWeight]=useState('normal');
++  const [title,setTitle]=useState('Untitled Design');
++  const [sidePanel,setSidePanel]=useState('properties');
++  const [fontFamily,setFontFamily]=useState('Inter');
++  const [shadow,setShadow]=useState(false);
++  const [cornerRadius,setCornerRadius]=useState(8);
++  const [showGrid,setShowGrid]=useState(false);
++  const [history,setHistory]=useState([]);
++  const [historyIndex,setHistoryIndex]=useState(-1);
++  const [comments,setComments]=useState([]);
++  const [commentMode,setCommentMode]=useState(false);
++  const [activeComment,setActiveComment]=useState(null);
++  const [newCommentPos,setNewCommentPos]=useState(null);
++  const [newCommentText,setNewCommentText]=useState('');
++  const [layerVis,setLayerVis]=useState({});
++  const [layerLocked,setLayerLocked]=useState({});
++  const [layerTick,setLayerTick]=useState(0); // force re-render layers
++
++  /* page zoom block */
++  useEffect(()=>{
++    const b=(e)=>{if(e.ctrlKey||e.metaKey)e.preventDefault()};
++    document.addEventListener('wheel',b,{passive:false});
++    return()=>document.removeEventListener('wheel',b);
++  },[]);
++
++  /* canvas wheel zoom */
++  useEffect(()=>{
++    const el=wrapperRef.current; if(!el) return;
++    const h=(e)=>{e.preventDefault();if(!fabricRef.current||!designRef.current)return;applyZoomDelta(e.deltaY<0?10:-10)};
++    el.addEventListener('wheel',h,{passive:false});
++    return()=>el.removeEventListener('wheel',h);
++  // eslint-disable-next-line react-hooks/exhaustive-deps
++  },[]);
++
++  /* keyboard shortcuts */
++  useEffect(()=>{
++    const h=(e)=>{
++      if(e.target.tagName==='INPUT'||e.target.contentEditable==='true') return;
++      if((e.ctrlKey||e.metaKey)&&e.key==='z'){e.preventDefault();undo();}
++      if((e.ctrlKey||e.metaKey)&&e.key==='y'){e.preventDefault();redo();}
++      if((e.ctrlKey||e.metaKey)&&e.key==='d'){e.preventDefault();duplicateSelected();}
++      if((e.key==='Delete'||e.key==='Backspace')&&fabricRef.current?.getActiveObject()){e.preventDefault();deleteSelected();}
++      if(e.key==='Escape'){setCommentMode(false);setNewCommentPos(null);setActiveTool('select');}
+     };
+-    el.addEventListener('wheel', onWheel, { passive: false });
+-    return () => el.removeEventListener('wheel', onWheel);
++    document.addEventListener('keydown',h);
++    return()=>document.removeEventListener('keydown',h);
+   // eslint-disable-next-line react-hooks/exhaustive-deps
+-  }, []);
++  },[history,historyIndex]);
+ 
+-  useEffect(() => {
++  useEffect(()=>{
+     loadDesign();
+-    return () => {
+-      if (fabricRef.current) fabricRef.current.dispose();
+-      clearTimeout(autoSaveTimer.current);
+-    };
++    return()=>{if(fabricRef.current)fabricRef.current.dispose();clearTimeout(autoSaveTimer.current)};
+   // eslint-disable-next-line react-hooks/exhaustive-deps
+-  }, [id]);
+-
+-  /* ── Load & init ── */
+-  const loadDesign = async () => {
+-    try {
+-      const { data } = await api.get(`/designs/${id}`);
+-      setDesign(data.design);
+-      designRef.current = data.design;
+-      setTitle(data.design.title);
+-      initCanvas(data.design);
+-    } catch {
+-      toast.error('Failed to load design');
+-      navigate('/dashboard');
+-    }
++  },[id]);
++
++  const pushHistory=useCallback(()=>{
++    if(!fabricRef.current) return;
++    const s=JSON.stringify(fabricRef.current.toJSON());
++    setHistory(p=>{const t=p.slice(0,historyIndex+1);return[...t,s].slice(-50)});
++    setHistoryIndex(p=>Math.min(p+1,49));
++  },[historyIndex]);
++
++  const undo=()=>{
++    if(historyIndex<=0||!fabricRef.current) return;
++    fabricRef.current.loadFromJSON(history[historyIndex-1],()=>{fabricRef.current.renderAll();setHistoryIndex(i=>i-1);setActiveObj(null);setLayerTick(t=>t+1)});
+   };
+-
+-  const initCanvas = (d) => {
+-    if (!canvasRef.current) return;
+-    if (fabricRef.current) fabricRef.current.dispose();
+-
+-    const bw = d.width  || 1280;
+-    const bh = d.height || 720;
+-
+-    const canvas = new fabric.Canvas(canvasRef.current, {
+-      width: bw, height: bh,
+-      backgroundColor: '#1a1a1a',
+-      selection: true, preserveObjectStacking: true,
+-    });
+-    fabricRef.current = canvas;
+-
+-    if (d.canvasData && d.canvasData !== '{}') {
+-      try { canvas.loadFromJSON(d.canvasData, () => canvas.renderAll()); } catch (_) {}
+-    }
+-
+-    canvas.on('selection:created', e => setActiveObj(e.selected?.[0] || null));
+-    canvas.on('selection:updated', e => setActiveObj(e.selected?.[0] || null));
+-    canvas.on('selection:cleared',  () => setActiveObj(null));
+-    canvas.on('object:modified', () => { scheduleAutoSave(); syncState(); });
+-    canvas.on('object:added',    () => { scheduleAutoSave(); syncState(); });
+-    canvas.on('object:removed',  () => { scheduleAutoSave(); syncState(); });
+-
+-    fitCanvas(canvas, bw, bh);
++  const redo=()=>{
++    if(historyIndex>=history.length-1||!fabricRef.current) return;
++    fabricRef.current.loadFromJSON(history[historyIndex+1],()=>{fabricRef.current.renderAll();setHistoryIndex(i=>i+1);setActiveObj(null);setLayerTick(t=>t+1)});
+   };
+ 
+-  const applyCanvasSize = (canvas, w, h) => {
+-    if (!canvas || !Number.isFinite(w) || !Number.isFinite(h)) return;
+-    if (typeof canvas.setDimensions === 'function') {
+-      try { canvas.setDimensions({ width: w, height: h }); return; } catch (_) {}
+-    }
+-    canvas.width = w; canvas.height = h;
+-    [canvas.lowerCanvasEl, canvas.upperCanvasEl].forEach(el => {
+-      if (!el) return;
+-      el.width = w; el.height = h;
+-      el.style.width = `${w}px`; el.style.height = `${h}px`;
+-    });
+-    if (typeof canvas.calcOffset === 'function') canvas.calcOffset();
++  const loadDesign=async()=>{
++    try{
++      const{data}=await api.get(`/designs/${id}`);
++      setDesign(data.design); designRef.current=data.design;
++      setTitle(data.design.title); initCanvas(data.design);
++      try{setComments(JSON.parse(localStorage.getItem(`synapse_comments_${id}`)||'[]'))}catch(_){}
++    }catch{toast.error('Failed to load design');navigate('/dashboard');}
+   };
+ 
+-  const fitCanvas = (canvas, w, h) => {
+-    const wrapper = wrapperRef.current;
+-    if (!wrapper) return;
+-    const scaleX = (wrapper.clientWidth  - 80) / w;
+-    const scaleY = (wrapper.clientHeight - 80) / h;
+-    const scale  = Math.min(scaleX, scaleY, 1);
+-    const pct    = Math.round(scale * 100);
+-    setZoom(pct);
+-    canvas.setZoom(scale);
+-    applyCanvasSize(canvas, w * scale, h * scale);
+-    canvas.renderAll();
++  const initCanvas=(d)=>{
++    if(!canvasRef.current) return;
++    if(fabricRef.current) fabricRef.current.dispose();
++    const bw=d.width||1280; const bh=d.height||720;
++    const canvas=new fabric.Canvas(canvasRef.current,{width:bw,height:bh,backgroundColor:'#1a1a1a',selection:true,preserveObjectStacking:true});
++    fabricRef.current=canvas;
++    if(d.canvasData&&d.canvasData!=='{}'){
++      try{canvas.loadFromJSON(d.canvasData,()=>{canvas.renderAll();pushHistory();setLayerTick(t=>t+1);})}catch(_){}
++    } else {pushHistory();}
++    canvas.on('selection:created',e=>setActiveObj(e.selected?.[0]||null));
++    canvas.on('selection:updated',e=>setActiveObj(e.selected?.[0]||null));
++    canvas.on('selection:cleared',()=>setActiveObj(null));
++    canvas.on('object:modified',()=>{scheduleAutoSave();pushHistory();setLayerTick(t=>t+1)});
++    canvas.on('object:added',()=>{scheduleAutoSave();pushHistory();setLayerTick(t=>t+1)});
++    canvas.on('object:removed',()=>{scheduleAutoSave();pushHistory();setLayerTick(t=>t+1)});
++    fitCanvas(canvas,bw,bh);
+   };
+ 
+-  /* ── Zoom helpers ── */
+-  const applyZoomDelta = (delta) => {
+-    const canvas = fabricRef.current;
+-    const d = designRef.current;
+-    if (!canvas || !d) return;
+-    setZoom(prev => {
+-      const next  = Math.min(200, Math.max(25, prev + delta));
+-      const scale = next / 100;
+-      canvas.setZoom(scale);
+-      applyCanvasSize(canvas, d.width * scale, d.height * scale);
+-      canvas.renderAll();
+-      return next;
+-    });
++  const applyCanvasSize=(canvas,w,h)=>{
++    if(!canvas||!Number.isFinite(w)||!Number.isFinite(h)) return;
++    if(typeof canvas.setDimensions==='function'){try{canvas.setDimensions({width:w,height:h});return}catch(_){}}
++    canvas.width=w;canvas.height=h;
++    [canvas.lowerCanvasEl,canvas.upperCanvasEl].forEach(el=>{if(!el) return;el.width=w;el.height=h;el.style.width=`${w}px`;el.style.height=`${h}px`});
++    if(typeof canvas.calcOffset==='function') canvas.calcOffset();
+   };
+ 
+-  const handleZoom = (delta) => applyZoomDelta(delta);
+-
+-  /* ── Save ── */
+-  const scheduleAutoSave = () => {
+-    clearTimeout(autoSaveTimer.current);
+-    autoSaveTimer.current = setTimeout(() => saveDesign(true), 3000);
++  const fitCanvas=(canvas,w,h)=>{
++    const wrapper=wrapperRef.current; if(!wrapper) return;
++    const scale=Math.min((wrapper.clientWidth-80)/w,(wrapper.clientHeight-80)/h,1);
++    setZoom(Math.round(scale*100));canvas.setZoom(scale);applyCanvasSize(canvas,w*scale,h*scale);canvas.renderAll();
+   };
+ 
+-  const saveDesign = async (auto = false) => {   // ← FIX: default false so manual save shows toast
+-    if (!fabricRef.current || !id) return;
+-    setSaving(true);
+-    try {
+-      const canvas     = fabricRef.current;
+-      const d          = designRef.current;
+-      // temporarily reset zoom to get full-res thumbnail
+-      const currentZoom = canvas.getZoom();
+-      canvas.setZoom(1);
+-      applyCanvasSize(canvas, d?.width || 1280, d?.height || 720);
+-      const thumbnail = canvas.toDataURL({ format: 'jpeg', quality: 0.5, multiplier: 0.5 });
+-      const canvasData = JSON.stringify(canvas.toJSON());
+-      // restore zoom
+-      canvas.setZoom(currentZoom);
+-      applyCanvasSize(canvas, (d?.width || 1280) * currentZoom, (d?.height || 720) * currentZoom);
+-      canvas.renderAll();
+-
+-      await api.put(`/designs/${id}`, { title, canvasData, thumbnail, width: d?.width, height: d?.height });
+-      // Only show toast if manual save, otherwise let realtime sync feel invisible
+-      if (!auto) toast.success('Design saved! ✓');
+-    } catch (err) {
+-      console.error(err);
+-      if (!auto) toast.error('Save failed');
+-    } finally {
+-      setSaving(false);
+-    }
++  const applyZoomDelta=(delta)=>{
++    const canvas=fabricRef.current;const d=designRef.current;if(!canvas||!d) return;
++    setZoom(prev=>{const next=Math.min(200,Math.max(25,prev+delta));const s=next/100;canvas.setZoom(s);applyCanvasSize(canvas,d.width*s,d.height*s);canvas.renderAll();return next});
+   };
+ 
+-  const shareRoom = async () => {
+-    try {
+-      if (design && !design.isPublic) {
+-        await api.put(`/designs/${id}/share`, { isPublic: true });
+-        setDesign(prev => ({ ...prev, isPublic: true }));
+-        toast.success('Link copied & made public!');
+-      } else {
+-        toast.success('Link copied!');
+-      }
+-      const link = `${window.location.origin}/editor/${id}`;
+-      navigator.clipboard.writeText(link);
+-    } catch (err) {
+-      if (err.response?.status === 403) {
+-        const link = `${window.location.origin}/editor/${id}`;
+-        navigator.clipboard.writeText(link);
+-        toast.success('Link copied! (Guest)');
+-      } else {
+-        toast.error('Failed to make design public');
+-      }
+-    }
++  const scheduleAutoSave=()=>{clearTimeout(autoSaveTimer.current);autoSaveTimer.current=setTimeout(()=>saveDesign(true),3000)};
++
++  const saveDesign=async(auto=false)=>{
++    if(!fabricRef.current||!id) return; setSaving(true);
++    try{
++      const canvas=fabricRef.current;const d=designRef.current;
++      const cz=canvas.getZoom();canvas.setZoom(1);applyCanvasSize(canvas,d?.width||1280,d?.height||720);
++      const thumbnail=canvas.toDataURL({format:'jpeg',quality:0.5,multiplier:0.5});
++      const canvasData=JSON.stringify(canvas.toJSON());
++      canvas.setZoom(cz);applyCanvasSize(canvas,(d?.width||1280)*cz,(d?.height||720)*cz);canvas.renderAll();
++      await api.put(`/designs/${id}`,{title,canvasData,thumbnail,width:d?.width,height:d?.height});
++      if(!auto) toast.success('Design saved! ✓');
++    }catch(err){console.error(err);if(!auto) toast.error('Save failed');}
++    finally{setSaving(false);}
+   };
+ 
+-  /* ── Export ── */
+-  const triggerDownload = (href, name) => {
+-    const a = document.createElement('a'); a.href = href; a.download = name; a.click();
+-  };
++  const triggerDownload=(href,name)=>{const a=document.createElement('a');a.href=href;a.download=name;a.click()};
+ 
+-  const handleExport = (fmt) => {
+-    if (!fabricRef.current) return;
+-    const canvas = fabricRef.current;
+-    const d = designRef.current;
+-
+-    if (fmt === 'png') {
+-      // export at real resolution (1× zoom)
+-      const prev = canvas.getZoom();
+-      canvas.setZoom(1);
+-      applyCanvasSize(canvas, d?.width || 1280, d?.height || 720);
+-      const url = canvas.toDataURL({ format: 'png', multiplier: 2 });
+-      canvas.setZoom(prev);
+-      applyCanvasSize(canvas, (d?.width || 1280) * prev, (d?.height || 720) * prev);
+-      canvas.renderAll();
+-      triggerDownload(url, `${title}.png`);
+-      toast.success('Exported as PNG!');
+-      return;
++  const handleExport=(fmt)=>{
++    if(!fabricRef.current) return;
++    const canvas=fabricRef.current;const d=designRef.current;
++    if(fmt==='png'){
++      const prev=canvas.getZoom();canvas.setZoom(1);applyCanvasSize(canvas,d?.width||1280,d?.height||720);
++      const url=canvas.toDataURL({format:'png',multiplier:2});
++      canvas.setZoom(prev);applyCanvasSize(canvas,(d?.width||1280)*prev,(d?.height||720)*prev);canvas.renderAll();
++      triggerDownload(url,`${title}.png`);toast.success('Exported as PNG!');return;
+     }
+-    if (fmt === 'pdf') { exportPDF(); return; }
+-    if (fmt === 'doc') { exportDOC(); return; }
+-    if (fmt === 'zip') { exportZIP(); }
++    if(fmt==='pdf'){exportPDF();return;}if(fmt==='doc'){exportDOC();return;}if(fmt==='zip'){exportZIP();}
+   };
+ 
+-  const exportPDF = () => {
+-    const canvas  = fabricRef.current;
+-    const d       = designRef.current;
+-    const prev    = canvas.getZoom();
+-    canvas.setZoom(1);
+-    applyCanvasSize(canvas, d?.width || 1280, d?.height || 720);
+-    const imgData = canvas.toDataURL({ format: 'jpeg', quality: 0.92, multiplier: 2 });
+-    const w = d?.width || 1280;
+-    const h = d?.height || 720;
+-    canvas.setZoom(prev);
+-    applyCanvasSize(canvas, w * prev, h * prev);
+-    canvas.renderAll();
+-
+-    const doExport = () => {
+-      const { jsPDF } = window.jspdf;
+-      const pdf = new jsPDF({ orientation: w >= h ? 'l' : 'p', unit: 'px', format: [w, h] });
+-      pdf.addImage(imgData, 'JPEG', 0, 0, w, h);
+-      pdf.save(`${title}.pdf`);
+-      toast.success('Exported as PDF!');
+-    };
+-    if (window.jspdf) { doExport(); return; }
+-    const s = document.createElement('script');
+-    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+-    s.onload = doExport; document.head.appendChild(s);
++  const exportPDF=()=>{
++    const c=fabricRef.current;const d=designRef.current;const prev=c.getZoom();
++    c.setZoom(1);applyCanvasSize(c,d?.width||1280,d?.height||720);
++    const img=c.toDataURL({format:'jpeg',quality:0.92,multiplier:2});const w=d?.width||1280;const h=d?.height||720;
++    c.setZoom(prev);applyCanvasSize(c,w*prev,h*prev);c.renderAll();
++    const go=()=>{const{jsPDF}=window.jspdf;const pdf=new jsPDF({orientation:w>=h?'l':'p',unit:'px',format:[w,h]});pdf.addImage(img,'JPEG',0,0,w,h);pdf.save(`${title}.pdf`);toast.success('Exported as PDF!')};
++    if(window.jspdf){go();return;}const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';s.onload=go;document.head.appendChild(s);
+   };
+ 
+-  const exportDOC = () => {
+-    const canvas = fabricRef.current;
+-    const d      = designRef.current;
+-    const prev   = canvas.getZoom();
+-    canvas.setZoom(1);
+-    applyCanvasSize(canvas, d?.width || 1280, d?.height || 720);
+-    const imgData = canvas.toDataURL({ format: 'png', multiplier: 1 });
+-    canvas.setZoom(prev);
+-    applyCanvasSize(canvas, (d?.width || 1280) * prev, (d?.height || 720) * prev);
+-    canvas.renderAll();
+-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>${title}</title><style>body{margin:0;padding:40px;font-family:Arial,sans-serif}h1{font-size:24px;margin-bottom:20px}img{max-width:100%}p{color:#555;font-size:13px;margin-top:16px}</style></head><body><h1>${title}</h1><img src="${imgData}" /><p>Created with Synapse — ${new Date().toLocaleDateString()}</p></body></html>`;
+-    const blob = new Blob([html], { type: 'application/msword' });
+-    const url  = URL.createObjectURL(blob);
+-    triggerDownload(url, `${title}.doc`);
+-    URL.revokeObjectURL(url);
+-    toast.success('Exported as DOC!');
++  const exportDOC=()=>{
++    const c=fabricRef.current;const d=designRef.current;const prev=c.getZoom();
++    c.setZoom(1);applyCanvasSize(c,d?.width||1280,d?.height||720);const img=c.toDataURL({format:'png',multiplier:1});
++    c.setZoom(prev);applyCanvasSize(c,(d?.width||1280)*prev,(d?.height||720)*prev);c.renderAll();
++    const blob=new Blob([`<!DOCTYPE html><html><body><h1>${title}</h1><img src="${img}"/></body></html>`],{type:'application/msword'});
++    const url=URL.createObjectURL(blob);triggerDownload(url,`${title}.doc`);URL.revokeObjectURL(url);toast.success('Exported as DOC!');
+   };
+ 
+-  const exportZIP = async () => {
+-    const loadLib = () => new Promise((res, rej) => {
+-      if (window.JSZip) { res(window.JSZip); return; }
+-      const s = document.createElement('script');
+-      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+-      s.onload = () => res(window.JSZip); s.onerror = rej;
+-      document.head.appendChild(s);
+-    });
+-    try {
+-      const JSZip   = await loadLib();
+-      const canvas  = fabricRef.current;
+-      const d       = designRef.current;
+-      const prev    = canvas.getZoom();
+-      canvas.setZoom(1);
+-      applyCanvasSize(canvas, d?.width || 1280, d?.height || 720);
+-      const pngB64  = canvas.toDataURL({ format: 'png', multiplier: 2 }).split(',')[1];
+-      const jsonStr = JSON.stringify(canvas.toJSON(), null, 2);
+-      canvas.setZoom(prev);
+-      applyCanvasSize(canvas, (d?.width || 1280) * prev, (d?.height || 720) * prev);
+-      canvas.renderAll();
+-
+-      const zip    = new JSZip();
+-      const folder = zip.folder(title.replace(/[^a-z0-9]/gi, '_'));
+-      folder.file(`${title}.png`, pngB64, { base64: true });
+-      folder.file('canvas.json', jsonStr);
+-      folder.file('README.md', `# ${title}\nCreated with Synapse\nDate: ${new Date().toLocaleDateString()}`);
+-      const blob = await zip.generateAsync({ type: 'blob' });
+-      const url  = URL.createObjectURL(blob);
+-      triggerDownload(url, `${title}.zip`);
+-      URL.revokeObjectURL(url);
+-      toast.success('Downloaded as ZIP!');
+-    } catch { toast.error('ZIP export failed'); }
++  const exportZIP=async()=>{
++    const loadLib=()=>new Promise((res,rej)=>{if(window.JSZip){res(window.JSZip);return;}const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';s.onload=()=>res(window.JSZip);s.onerror=rej;document.head.appendChild(s)});
++    try{const JSZip=await loadLib();const c=fabricRef.current;const d=designRef.current;const prev=c.getZoom();
++      c.setZoom(1);applyCanvasSize(c,d?.width||1280,d?.height||720);
++      const png=c.toDataURL({format:'png',multiplier:2}).split(',')[1];const json=JSON.stringify(c.toJSON(),null,2);
++      c.setZoom(prev);applyCanvasSize(c,(d?.width||1280)*prev,(d?.height||720)*prev);c.renderAll();
++      const zip=new JSZip();const f=zip.folder(title.replace(/[^a-z0-9]/gi,'_'));
++      f.file(`${title}.png`,png,{base64:true});f.file('canvas.json',json);f.file('README.md',`# ${title}\nSynapse Design\n${new Date().toLocaleDateString()}`);
++      const blob=await zip.generateAsync({type:'blob'});const url=URL.createObjectURL(blob);triggerDownload(url,`${title}.zip`);URL.revokeObjectURL(url);toast.success('Downloaded as ZIP!')
++    }catch{toast.error('ZIP export failed');}
+   };
+ 
+-  /* ── Tools ── */
+-  const addText = () => {
+-    if (!fabricRef.current) return;
+-    fabricRef.current.add(new fabric.IText('Double-click to edit', {
+-      left: 200, top: 200, fill: '#ffffff', fontSize, fontWeight,
+-      fontFamily: 'Inter, sans-serif', editable: true,
+-    }));
+-    setActiveTool('select');
++  /* ── All original + new tools ── */
++  const addText=()=>{if(!fabricRef.current) return;fabricRef.current.add(new fabric.IText('Double-click to edit',{left:200,top:200,fill:'#ffffff',fontSize,fontWeight,fontFamily:'Inter, sans-serif',editable:true}));setActiveTool('select')};
++  const addRect=()=>{if(!fabricRef.current) return;fabricRef.current.add(new fabric.Rect({left:150,top:150,width:200,height:120,fill:fillColor,stroke:strokeColor,strokeWidth,rx:cornerRadius,ry:cornerRadius}));setActiveTool('select')};
++  const addCircle=()=>{if(!fabricRef.current) return;fabricRef.current.add(new fabric.Circle({left:200,top:150,radius:70,fill:fillColor,stroke:strokeColor,strokeWidth}));setActiveTool('select')};
++  const addTriangle=()=>{if(!fabricRef.current) return;fabricRef.current.add(new fabric.Triangle({left:200,top:150,width:150,height:130,fill:fillColor,stroke:strokeColor,strokeWidth}));setActiveTool('select')};
++  const addLine=()=>{if(!fabricRef.current) return;fabricRef.current.add(new fabric.Line([100,200,400,200],{stroke:strokeColor,strokeWidth:strokeWidth||3}));setActiveTool('select')};
++  const addImage=()=>{const url=prompt('Enter image URL:');if(!url) return;fabric.Image.fromURL(url,img=>{img.scaleToWidth(200);img.set({left:100,top:100});fabricRef.current.add(img)},{crossOrigin:'anonymous'})};
++  const enableDrawing=()=>{if(!fabricRef.current) return;const on=!fabricRef.current.isDrawingMode;fabricRef.current.isDrawingMode=on;fabricRef.current.freeDrawingBrush.color=fillColor;fabricRef.current.freeDrawingBrush.width=strokeWidth||3;setActiveTool(on?'draw':'select')};
++  const deleteSelected=()=>{const c=fabricRef.current;if(!c) return;c.getActiveObjects().forEach(o=>c.remove(o));c.discardActiveObject();c.renderAll()};
++  const duplicateSelected=()=>{const c=fabricRef.current;const o=c?.getActiveObject();if(!o) return;o.clone(cl=>{cl.set({left:o.left+20,top:o.top+20});c.add(cl);c.setActiveObject(cl)})};
++  const bringForward=()=>{fabricRef.current?.getActiveObject()?.bringForward();fabricRef.current?.renderAll()};
++  const sendBackward=()=>{fabricRef.current?.getActiveObject()?.sendBackward();fabricRef.current?.renderAll()};
++  const bringToFront=()=>{fabricRef.current?.getActiveObject()?.bringToFront();fabricRef.current?.renderAll()};
++  const sendToBack=()=>{fabricRef.current?.getActiveObject()?.sendToBack();fabricRef.current?.renderAll()};
++  const updateObjProp=(prop,value)=>{const obj=fabricRef.current?.getActiveObject();if(!obj) return;obj.set(prop,value);fabricRef.current.renderAll();setActiveObj({...obj})};
++
++  /* NEW tools */
++  const addStar=()=>{
++    if(!fabricRef.current) return;
++    const pts=[];for(let i=0;i<10;i++){const r=i%2===0?80:34;const a=(i*Math.PI)/5-Math.PI/2;pts.push({x:120+r*Math.cos(a),y:120+r*Math.sin(a)});}
++    fabricRef.current.add(new fabric.Polygon(pts,{fill:fillColor,stroke:strokeColor,strokeWidth}));setActiveTool('select');
+   };
+-  const addRect = () => {
+-    if (!fabricRef.current) return;
+-    fabricRef.current.add(new fabric.Rect({ left:150,top:150,width:200,height:120,fill:fillColor,stroke:strokeColor,strokeWidth,rx:8,ry:8 }));
++  const addArrow=()=>{
++    if(!fabricRef.current) return;
++    fabricRef.current.add(new fabric.Path('M 0 0 L 160 0 L 160 -16 L 200 16 L 160 48 L 160 32 L 0 32 Z',{left:100,top:200,fill:fillColor,stroke:strokeColor,strokeWidth}));
+     setActiveTool('select');
+   };
+-  const addCircle = () => {
+-    if (!fabricRef.current) return;
+-    fabricRef.current.add(new fabric.Circle({ left:200,top:150,radius:70,fill:fillColor,stroke:strokeColor,strokeWidth }));
++  const addHeart=()=>{
++    if(!fabricRef.current) return;
++    fabricRef.current.add(new fabric.Path('M 100 30 A 30 30 0 0 1 160 30 A 30 30 0 0 1 220 30 Q 220 60 160 100 Q 100 60 100 30 Z',{fill:fillColor,stroke:strokeColor,strokeWidth,left:100,top:150}));
+     setActiveTool('select');
+   };
+-  const addTriangle = () => {
+-    if (!fabricRef.current) return;
+-    fabricRef.current.add(new fabric.Triangle({ left:200,top:150,width:150,height:130,fill:fillColor,stroke:strokeColor,strokeWidth }));
+-    setActiveTool('select');
++
++  const applyGradient=(stops)=>{
++    const obj=fabricRef.current?.getActiveObject();if(!obj){toast('Select an object first');return;}
++    obj.set('fill',new fabric.Gradient({type:'linear',gradientUnits:'percentage',coords:{x1:0,y1:0,x2:1,y2:1},colorStops:stops.map(s=>({offset:s.offset,color:s.color}))}));
++    fabricRef.current.renderAll();
+   };
+-  const addLine = () => {
+-    if (!fabricRef.current) return;
+-    fabricRef.current.add(new fabric.Line([100,200,400,200],{ stroke:strokeColor,strokeWidth:strokeWidth||3 }));
+-    setActiveTool('select');
++  const toggleShadow=()=>{
++    const obj=fabricRef.current?.getActiveObject();if(!obj) return;
++    const next=!shadow;setShadow(next);
++    if(next){obj.set('shadow',new fabric.Shadow({color:'rgba(0,0,0,0.5)',blur:16,offsetX:4,offsetY:4}));}else{obj.set('shadow',null);}
++    fabricRef.current.renderAll();
++  };
++  const flipH=()=>{const o=fabricRef.current?.getActiveObject();if(!o) return;o.set('flipX',!o.flipX);fabricRef.current.renderAll()};
++  const flipV=()=>{const o=fabricRef.current?.getActiveObject();if(!o) return;o.set('flipY',!o.flipY);fabricRef.current.renderAll()};
++  const alignToCanvas=(dir)=>{
++    const canvas=fabricRef.current;const obj=canvas?.getActiveObject();const d=designRef.current;if(!obj||!d) return;
++    if(dir==='left') obj.set('left',0);
++    if(dir==='center') obj.set('left',(d.width-obj.getScaledWidth())/2);
++    if(dir==='right') obj.set('left',d.width-obj.getScaledWidth());
++    if(dir==='top') obj.set('top',0);
++    if(dir==='middle') obj.set('top',(d.height-obj.getScaledHeight())/2);
++    if(dir==='bottom') obj.set('top',d.height-obj.getScaledHeight());
++    canvas.renderAll();
+   };
+-  const addImage = () => {
+-    const url = prompt('Enter image URL:');
+-    if (!url) return;
+-    fabric.Image.fromURL(url, img => {
+-      img.scaleToWidth(200); img.set({ left:100,top:100 });
+-      fabricRef.current.add(img);
+-    }, { crossOrigin:'anonymous' });
++
++  /* Layer controls */
++  const toggleLayerVis=(idx,e)=>{
++    e.stopPropagation();const c=fabricRef.current;if(!c) return;
++    const objs=c.getObjects();const obj=objs[objs.length-1-idx];if(!obj) return;
++    const next=!layerVis[idx];setLayerVis(p=>({...p,[idx]:next}));obj.set('visible',!next);c.renderAll();
+   };
+-  const enableDrawing = () => {
+-    if (!fabricRef.current) return;
+-    const on = !fabricRef.current.isDrawingMode;
+-    fabricRef.current.isDrawingMode = on;
+-    fabricRef.current.freeDrawingBrush.color = fillColor;
+-    fabricRef.current.freeDrawingBrush.width = strokeWidth || 3;
+-    setActiveTool(on ? 'draw' : 'select');
++  const toggleLayerLock=(idx,e)=>{
++    e.stopPropagation();const c=fabricRef.current;if(!c) return;
++    const objs=c.getObjects();const obj=objs[objs.length-1-idx];if(!obj) return;
++    const next=!layerLocked[idx];setLayerLocked(p=>({...p,[idx]:next}));obj.set({selectable:!next,evented:!next});c.renderAll();
+   };
+-  const deleteSelected = () => {
+-    const c = fabricRef.current; if (!c) return;
+-    c.getActiveObjects().forEach(o => c.remove(o));
+-    c.discardActiveObject(); c.renderAll();
+-    syncState();
++  const moveLayerUp=(idx,e)=>{
++    e.stopPropagation();const c=fabricRef.current;if(!c) return;
++    const objs=c.getObjects();const obj=objs[objs.length-1-idx];if(!obj) return;
++    obj.bringForward();c.renderAll();setLayerTick(t=>t+1);
+   };
+-  const duplicateSelected = () => {
+-    const c = fabricRef.current; const o = c?.getActiveObject(); if (!o) return;
+-    o.clone(clone => { clone.set({ left: o.left+20, top: o.top+20 }); c.add(clone); c.setActiveObject(clone); syncState(); });
++  const moveLayerDown=(idx,e)=>{
++    e.stopPropagation();const c=fabricRef.current;if(!c) return;
++    const objs=c.getObjects();const obj=objs[objs.length-1-idx];if(!obj) return;
++    obj.sendBackward();c.renderAll();setLayerTick(t=>t+1);
+   };
+-  const bringForward = () => { fabricRef.current?.getActiveObject()?.bringForward(); fabricRef.current?.renderAll(); syncState(); };
+-  const sendBackward = () => { fabricRef.current?.getActiveObject()?.sendBackward(); fabricRef.current?.renderAll(); syncState(); };
+ 
+-  const updateObjProp = (prop, value) => {
+-    const obj = fabricRef.current?.getActiveObject();
+-    if (!obj) return;
+-    obj.set(prop, value);
+-    fabricRef.current.renderAll();
+-    setActiveObj({ ...obj });
+-    syncState();
++  /* Comments */
++  const handleCanvasClick=(e)=>{
++    if(!commentMode) return;
++    const rect=e.currentTarget.getBoundingClientRect();
++    setNewCommentPos({x:e.clientX-rect.left,y:e.clientY-rect.top});
++    setNewCommentText('');
++    setTimeout(()=>commentInputRef.current?.focus(),80);
+   };
+-
+-  const tools = [
+-    { id:'select',   icon:<MousePointer size={18}/>, label:'Select',   action:()=>{ fabricRef.current&&(fabricRef.current.isDrawingMode=false); setActiveTool('select'); } },
+-    { id:'text',     icon:<Type size={18}/>,         label:'Text',     action:addText },
+-    { id:'rect',     icon:<Square size={18}/>,       label:'Rect',     action:addRect },
+-    { id:'circle',   icon:<Circle size={18}/>,       label:'Circle',   action:addCircle },
+-    { id:'triangle', icon:<Triangle size={18}/>,     label:'Triangle', action:addTriangle },
+-    { id:'line',     icon:<Minus size={18}/>,        label:'Line',     action:addLine },
+-    { id:'draw',     icon:<Pencil size={18}/>,       label:'Draw',     action:enableDrawing },
+-    { id:'image',    icon:<ImageIcon size={18}/>,    label:'Image',    action:addImage },
++  const addComment=()=>{
++    if(!newCommentText.trim()||!newCommentPos) return;
++    const c={id:Date.now(),x:newCommentPos.x,y:newCommentPos.y,text:newCommentText.trim(),author:'You',time:new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}),resolved:false};
++    const updated=[...comments,c];setComments(updated);
++    localStorage.setItem(`synapse_comments_${id}`,JSON.stringify(updated));
++    setNewCommentPos(null);setNewCommentText('');setCommentMode(false);toast.success('Comment added');
++  };
++  const resolveComment=(cid)=>{const u=comments.map(c=>c.id===cid?{...c,resolved:true}:c);setComments(u);localStorage.setItem(`synapse_comments_${id}`,JSON.stringify(u));setActiveComment(null)};
++  const deleteComment=(cid)=>{const u=comments.filter(c=>c.id!==cid);setComments(u);localStorage.setItem(`synapse_comments_${id}`,JSON.stringify(u));setActiveComment(null)};
++
++  const tools=[
++    {id:'select',  icon:<MousePointer size={16}/>,  label:'Select',   action:()=>{fabricRef.current&&(fabricRef.current.isDrawingMode=false);setActiveTool('select')}},
++    {id:'text',    icon:<Type size={16}/>,           label:'Text',     action:addText},
++    {id:'rect',    icon:<Square size={16}/>,         label:'Rect',     action:addRect},
++    {id:'circle',  icon:<Circle size={16}/>,         label:'Circle',   action:addCircle},
++    {id:'triangle',icon:<Triangle size={16}/>,       label:'Tri',      action:addTriangle},
++    {id:'star',    icon:<Star size={16}/>,           label:'Star',     action:addStar},
++    {id:'arrow',   icon:<span style={{fontSize:12,fontWeight:800,lineHeight:1}}>→</span>, label:'Arrow', action:addArrow},
++    {id:'heart',   icon:<span style={{fontSize:12}}>♥</span>, label:'Heart', action:addHeart},
++    {id:'line',    icon:<Minus size={16}/>,          label:'Line',     action:addLine},
++    {id:'draw',    icon:<Pencil size={16}/>,         label:'Draw',     action:enableDrawing},
++    {id:'image',   icon:<ImageIcon size={16}/>,      label:'Image',    action:addImage},
+   ];
+ 
+-  const layers = fabricRef.current?.getObjects() || [];
++  const layers=fabricRef.current?.getObjects()||[];
++  const openComments=comments.filter(c=>!c.resolved);
+ 
+-  return (
++  return(
+     <div className="h-screen bg-dark-950 flex flex-col overflow-hidden">
+-
+-      {/* ── Top Bar ── */}
+-      <header className="h-12 bg-dark-800 border-b border-dark-600 flex items-center px-3 gap-3 shrink-0 z-50">
+-        <button onClick={() => navigate('/dashboard')} className="tool-btn"><ArrowLeft size={16} /></button>
+-        <div className="w-px h-6 bg-dark-600" />
+-        <input
+-          value={title} onChange={e => setTitle(e.target.value)}
+-          onBlur={() => saveDesign(true)}
+-          className="bg-transparent text-sm font-medium text-white focus:outline-none border-b border-transparent focus:border-accent px-1 py-0.5 max-w-48"
+-        />
+-        <span className="text-xs flex items-center px-2 mr-2" style={{color: status === "connected" ? "#4ade80" : "#fbbf24"}}>
+-          {status === "connected" ? "● Live" : "● Reconnecting..."}
+-        </span>
+-        <div className="flex-1" />
+-
+-        {/* Zoom — canvas only */}
++      <EmojiSplasher/>
++
++      {/* Top bar */}
++      <header className="h-12 bg-dark-800 border-b border-dark-600 flex items-center px-3 gap-2 shrink-0 z-50">
++        <button onClick={()=>navigate('/dashboard')} className="tool-btn"><ArrowLeft size={16}/></button>
++        <div className="w-px h-6 bg-dark-600"/>
++        <input value={title} onChange={e=>setTitle(e.target.value)} onBlur={()=>saveDesign(true)}
++          className="bg-transparent text-sm font-medium text-white focus:outline-none border-b border-transparent focus:border-accent px-1 py-0.5 max-w-40"/>
++        <div className="flex-1"/>
++        <button onClick={undo} disabled={historyIndex<=0} className="tool-btn w-8 h-8" title="Undo Ctrl+Z"><RotateCcw size={13}/></button>
++        <button onClick={redo} disabled={historyIndex>=history.length-1} className="tool-btn w-8 h-8" title="Redo Ctrl+Y" style={{transform:'scaleX(-1)'}}><RotateCcw size={13}/></button>
++        <button onClick={()=>setShowGrid(g=>!g)} className={`tool-btn w-8 h-8 ${showGrid?'active':''}`} title="Grid"><Grid size={13}/></button>
++        <div style={{position:'relative'}}>
++          <button onClick={()=>{setCommentMode(m=>!m);if(!commentMode) setSidePanel('properties')}} className={`tool-btn w-8 h-8 ${commentMode?'active':''}`} title="Add comment" style={{color:commentMode?'#6366f1':undefined}}><MessageSquarePlus size={14}/></button>
++          {openComments.length>0&&<span style={{position:'absolute',top:-4,right:-4,background:'#6366f1',color:'#fff',borderRadius:999,fontSize:9,fontWeight:700,padding:'0 4px',minWidth:14,height:14,display:'flex',alignItems:'center',justifyContent:'center',border:'2px solid #111'}}>{openComments.length}</span>}
++        </div>
++        <div className="w-px h-6 bg-dark-600"/>
+         <div className="flex items-center gap-1 bg-dark-700 rounded-lg px-2 py-1">
+-          <button onClick={() => handleZoom(-10)} className="text-gray-400 hover:text-white p-0.5" title="Zoom out (or Ctrl+Scroll)"><ZoomOut size={14} /></button>
++          <button onClick={()=>applyZoomDelta(-10)} className="text-gray-400 hover:text-white p-0.5"><ZoomOut size={14}/></button>
+           <span className="text-xs font-mono text-gray-300 w-10 text-center">{zoom}%</span>
+-          <button onClick={() => handleZoom(10)} className="text-gray-400 hover:text-white p-0.5" title="Zoom in"><ZoomIn size={14} /></button>
++          <button onClick={()=>applyZoomDelta(10)} className="text-gray-400 hover:text-white p-0.5"><ZoomIn size={14}/></button>
+         </div>
+-
+-        <div className="flex items-center gap-2">
+-          <button onClick={shareRoom} className={`btn-primary text-sm px-3 py-1.5 h-8 ${design?.isPublic ? 'bg-green-600 hover:bg-green-500' : 'bg-indigo-600 hover:bg-indigo-500'} flex items-center gap-1`}>
+-            <Share2 size={14} /> {design?.isPublic ? 'Public Link' : 'Share'}
+-          </button>
+-          {design?.isPublic && (
+-            <button onClick={async () => {
+-              try {
+-                await api.put(`/designs/${id}/share`, { isPublic: false });
+-                setDesign(prev => ({ ...prev, isPublic: false }));
+-                toast.success('Made private');
+-              } catch { toast.error('Failed'); }
+-            }} className="text-xs text-red-400 hover:text-red-300">
+-              Make Private
+-            </button>
+-          )}
+-        </div>
+-
+-        <button onClick={() => saveDesign(false)} disabled={saving} className="btn-secondary text-sm px-3 py-1.5 h-8 border-dark-500">
+-          {saving
+-            ? <><span className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin" /> Saving...</>
+-            : <><Save size={14} /> Save</>}
++        <button onClick={()=>saveDesign(false)} disabled={saving} className="btn-secondary text-sm px-3 py-1.5 h-8">
++          {saving?<><span className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin"/> Saving...</>:<><Save size={14}/> Save</>}
+         </button>
+-
+-        <ExportDropdown onExport={handleExport} />
++        <ExportDropdown onExport={handleExport}/>
+       </header>
+ 
+       <div className="flex flex-1 overflow-hidden">
+-
+-        {/* ── Left Toolbar ── */}
+-        <aside className="w-14 bg-dark-800 border-r border-dark-600 flex flex-col items-center py-3 gap-1 shrink-0">
+-          {tools.map(t => (
+-            <button key={t.id}
+-              onClick={() => { t.action(); if (t.id !== 'draw') setActiveTool(t.id); }}
+-              title={t.label}
+-              className={`tool-btn ${activeTool === t.id ? 'active' : ''}`}
+-            >
+-              {t.icon}
+-              <span className="text-[9px] leading-none">{t.label}</span>
++        {/* Left toolbar */}
++        <aside className="w-14 bg-dark-800 border-r border-dark-600 flex flex-col items-center py-2 gap-0.5 shrink-0 overflow-y-auto">
++          {tools.map(t=>(
++            <button key={t.id} onClick={()=>{t.action();if(t.id!=='draw')setActiveTool(t.id)}} title={t.label} className={`tool-btn ${activeTool===t.id?'active':''}`}>
++              {t.icon}<span className="text-[8px] leading-none">{t.label}</span>
+             </button>
+           ))}
+-          <div className="w-8 h-px bg-dark-600 my-2" />
+-          <button onClick={deleteSelected}    title="Delete"        className="tool-btn text-red-400 hover:text-red-300 hover:bg-red-900/20"><Trash2 size={16} /></button>
+-          <button onClick={duplicateSelected} title="Duplicate"     className="tool-btn"><Copy size={16} /></button>
+-          <button onClick={bringForward}      title="Bring Forward" className="tool-btn"><ChevronUp size={16} /></button>
+-          <button onClick={sendBackward}      title="Send Backward" className="tool-btn"><ChevronDown size={16} /></button>
++          <div className="w-8 h-px bg-dark-600 my-1"/>
++          <button onClick={deleteSelected} title="Delete (Del)" className="tool-btn text-red-400 hover:text-red-300 hover:bg-red-900/20"><Trash2 size={15}/></button>
++          <button onClick={duplicateSelected} title="Duplicate Ctrl+D" className="tool-btn"><Copy size={15}/></button>
++          <div className="w-8 h-px bg-dark-600 my-0.5"/>
++          <button onClick={bringToFront} title="Bring to Front" className="tool-btn"><ArrowUpToLine size={15}/></button>
++          <button onClick={bringForward} title="Forward" className="tool-btn"><ChevronUp size={15}/></button>
++          <button onClick={sendBackward} title="Backward" className="tool-btn"><ChevronDown size={15}/></button>
++          <button onClick={sendToBack} title="Send to Back" className="tool-btn"><ArrowDownToLine size={15}/></button>
++          <div className="w-8 h-px bg-dark-600 my-0.5"/>
++          <button onClick={flipH} title="Flip H" className="tool-btn"><FlipHorizontal size={15}/></button>
++          <button onClick={flipV} title="Flip V" className="tool-btn"><FlipVertical size={15}/></button>
+         </aside>
+ 
+-        {/* ── Canvas Area ── Ctrl+Scroll captured here, NOT the page ── */}
+-        <main
+-          ref={wrapperRef}
+-          id="canvas-wrapper"
+-          className="flex-1 overflow-auto bg-dark-950 flex items-center justify-center"
+-          style={{ backgroundImage: 'radial-gradient(#222 1px, transparent 1px)', backgroundSize: '20px 20px' }}
++        {/* Canvas */}
++        <main ref={wrapperRef} id="canvas-wrapper" className="flex-1 overflow-auto bg-dark-950 flex items-center justify-center"
++          style={{backgroundImage:showGrid?'linear-gradient(rgba(99,102,241,0.1) 1px,transparent 1px),linear-gradient(90deg,rgba(99,102,241,0.1) 1px,transparent 1px),radial-gradient(#222 1px,transparent 1px)':'radial-gradient(#222 1px,transparent 1px)',backgroundSize:showGrid?'40px 40px,40px 40px,20px 20px':'20px 20px',cursor:commentMode?'crosshair':'default',position:'relative'}}
++          onClick={handleCanvasClick}
+         >
+-          <div className="shadow-2xl shadow-black">
+-            <canvas ref={canvasRef} />
++          <div className="shadow-2xl shadow-black" style={{position:'relative'}}>
++            <canvas ref={canvasRef}/>
++            {comments.map(c=>!c.resolved&&<CommentPin key={c.id} comment={c} onClick={setActiveComment}/>)}
++            {newCommentPos&&(
++              <div style={{position:'absolute',left:newCommentPos.x+10,top:newCommentPos.y+10,background:'#1a1a1a',border:'1px solid #6366f1',borderRadius:12,padding:12,zIndex:200,minWidth:240,boxShadow:'0 8px 32px rgba(0,0,0,.7)'}} onClick={e=>e.stopPropagation()}>
++                <p style={{fontSize:11,color:'#888',marginBottom:6}}>Add comment · Enter to post · Esc to cancel</p>
++                <textarea ref={commentInputRef} value={newCommentText} onChange={e=>setNewCommentText(e.target.value)}
++                  onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();addComment();}if(e.key==='Escape'){setNewCommentPos(null);}}}
++                  placeholder="Type your comment..." style={{width:'100%',background:'#111',border:'1px solid #333',borderRadius:8,color:'#fff',fontSize:12,padding:'8px 10px',resize:'none',outline:'none',height:68,fontFamily:'inherit'}}/>
++                <div style={{display:'flex',gap:6,marginTop:8}}>
++                  <button onClick={addComment} style={{flex:1,background:'#6366f1',border:'none',borderRadius:8,color:'#fff',fontSize:12,padding:'6px',cursor:'pointer',fontWeight:500}}>Post</button>
++                  <button onClick={()=>setNewCommentPos(null)} style={{background:'#222',border:'1px solid #333',borderRadius:8,color:'#888',fontSize:12,padding:'6px 10px',cursor:'pointer'}}>Cancel</button>
++                </div>
++              </div>
++            )}
++            {activeComment&&(
++              <div style={{position:'fixed',left:'50%',top:'50%',transform:'translate(-50%,-50%)',background:'#1a1a1a',border:'1px solid #6366f1',borderRadius:14,padding:20,zIndex:9000,minWidth:280,boxShadow:'0 16px 48px rgba(0,0,0,.8)'}} onClick={e=>e.stopPropagation()}>
++                <div style={{display:'flex',justifyContent:'space-between',marginBottom:10}}>
++                  <div><p style={{fontSize:12,fontWeight:600,color:'#fff'}}>{activeComment.author}</p><p style={{fontSize:10,color:'#555'}}>{activeComment.time}</p></div>
++                  <button onClick={()=>setActiveComment(null)} style={{background:'none',border:'none',color:'#555',cursor:'pointer'}}><X size={14}/></button>
++                </div>
++                <p style={{fontSize:13,color:'#d1d5db',lineHeight:1.6,marginBottom:14}}>{activeComment.text}</p>
++                <div style={{display:'flex',gap:8}}>
++                  <button onClick={()=>resolveComment(activeComment.id)} style={{flex:1,background:'rgba(34,197,94,0.12)',border:'1px solid rgba(34,197,94,0.3)',borderRadius:8,color:'#22c55e',fontSize:12,padding:'6px',cursor:'pointer'}}>✓ Resolve</button>
++                  <button onClick={()=>deleteComment(activeComment.id)} style={{background:'rgba(239,68,68,0.1)',border:'1px solid rgba(239,68,68,0.3)',borderRadius:8,color:'#f87171',fontSize:12,padding:'6px 10px',cursor:'pointer'}}>Delete</button>
++                </div>
++              </div>
++            )}
+           </div>
++          {commentMode&&<div style={{position:'absolute',top:12,left:'50%',transform:'translateX(-50%)',background:'rgba(99,102,241,0.9)',color:'#fff',fontSize:12,fontWeight:500,padding:'6px 16px',borderRadius:999,backdropFilter:'blur(8px)',pointerEvents:'none'}}>💬 Click canvas to add comment · Esc to cancel</div>}
+         </main>
+ 
+-        {/* ── Right Panel ── */}
+-        <aside className="w-64 bg-dark-800 border-l border-dark-600 flex flex-col shrink-0 overflow-hidden">
++        {/* Right panel */}
++        <aside className="w-72 bg-dark-800 border-l border-dark-600 flex flex-col shrink-0 overflow-hidden">
+           <div className="flex border-b border-dark-600">
+-            {['properties','layers'].map(p => (
+-              <button key={p} onClick={() => setSidePanel(p)}
+-                className={`flex-1 py-2.5 text-xs font-semibold capitalize transition-colors ${sidePanel === p ? 'text-white border-b-2 border-accent' : 'text-gray-500 hover:text-gray-300'}`}>
+-                {p}
+-              </button>
++            {[{id:'properties',label:'Props'},{id:'effects',label:'Effects'},{id:'layers',label:`Layers`},{id:'comments',label:`Notes${openComments.length>0?` (${openComments.length})`:''}`,}].map(p=>(
++              <button key={p.id} onClick={()=>setSidePanel(p.id)} className={`flex-1 py-2 text-[10px] font-semibold capitalize transition-colors ${sidePanel===p.id?'text-white border-b-2 border-accent':'text-gray-500 hover:text-gray-300'}`}>{p.label}</button>
+             ))}
+           </div>
+ 
+-          <div className="flex-1 overflow-y-auto p-4 space-y-5">
+-            {sidePanel === 'properties' ? (
++          <div className="flex-1 overflow-y-auto p-4 space-y-4">
++
++            {sidePanel==='properties'&&(
+               <>
+-                {/* Fill */}
+                 <div>
+-                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Fill Color</p>
+-                  <div className="grid grid-cols-5 gap-2 mb-3">
+-                    {COLORS.map(c => (
+-                      <button key={c} onClick={() => { setFillColor(c); updateObjProp('fill', c); }}
+-                        className={`w-8 h-8 rounded-lg border-2 transition-all ${fillColor===c?'border-accent scale-110':'border-transparent'}`}
+-                        style={{ backgroundColor: c }} />
+-                    ))}
+-                  </div>
+-                  <input type="color" value={fillColor}
+-                    onChange={e => { setFillColor(e.target.value); updateObjProp('fill', e.target.value); }}
+-                    className="w-full h-9 rounded-lg cursor-pointer bg-dark-700 border border-dark-500 p-1" />
++                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Fill Color</p>
++                  <div className="grid grid-cols-5 gap-1.5 mb-2">{COLORS.map(c=><button key={c} onClick={()=>{setFillColor(c);updateObjProp('fill',c)}} className={`w-8 h-8 rounded-lg border-2 transition-all ${fillColor===c?'border-accent scale-110':'border-transparent'}`} style={{backgroundColor:c}}/>)}</div>
++                  <input type="color" value={fillColor} onChange={e=>{setFillColor(e.target.value);updateObjProp('fill',e.target.value)}} className="w-full h-9 rounded-lg cursor-pointer bg-dark-700 border border-dark-500 p-1"/>
+                 </div>
+-
+-                {/* Stroke */}
+                 <div>
+-                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Stroke</p>
+-                  <div className="grid grid-cols-5 gap-2 mb-3">
+-                    {COLORS.map(c => (
+-                      <button key={c} onClick={() => { setStrokeColor(c); updateObjProp('stroke', c); }}
+-                        className={`w-8 h-8 rounded-lg border-2 transition-all ${strokeColor===c?'border-accent scale-110':'border-transparent'}`}
+-                        style={{ backgroundColor: c }} />
+-                    ))}
+-                  </div>
++                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Stroke</p>
++                  <div className="grid grid-cols-5 gap-1.5 mb-2">{COLORS.map(c=><button key={c} onClick={()=>{setStrokeColor(c);updateObjProp('stroke',c)}} className={`w-8 h-8 rounded-lg border-2 transition-all ${strokeColor===c?'border-accent scale-110':'border-transparent'}`} style={{backgroundColor:c}}/>)}</div>
+                   <div className="flex items-center gap-2">
+-                    <input type="color" value={strokeColor}
+-                      onChange={e => { setStrokeColor(e.target.value); updateObjProp('stroke', e.target.value); }}
+-                      className="w-16 h-9 rounded-lg cursor-pointer bg-dark-700 border border-dark-500 p-1" />
+-                    <div className="flex-1">
+-                      <label className="text-xs text-gray-500 mb-1 block">Width: {strokeWidth}px</label>
+-                      <input type="range" min="0" max="20" value={strokeWidth}
+-                        onChange={e => { const v=+e.target.value; setStrokeWidth(v); updateObjProp('strokeWidth',v); }}
+-                        className="w-full accent-indigo-500" />
+-                    </div>
++                    <input type="color" value={strokeColor} onChange={e=>{setStrokeColor(e.target.value);updateObjProp('stroke',e.target.value)}} className="w-14 h-9 rounded-lg cursor-pointer bg-dark-700 border border-dark-500 p-1"/>
++                    <div className="flex-1"><label className="text-xs text-gray-500 mb-1 block">Width: {strokeWidth}px</label><input type="range" min="0" max="20" value={strokeWidth} onChange={e=>{const v=+e.target.value;setStrokeWidth(v);updateObjProp('strokeWidth',v)}} className="w-full accent-indigo-500"/></div>
+                   </div>
+                 </div>
+-
+-                {/* Typography */}
+-                {activeObj?.type === 'i-text' && (
++                <div><label className="text-xs text-gray-500 block mb-1">Corner Radius: {cornerRadius}px</label><input type="range" min="0" max="60" value={cornerRadius} onChange={e=>{setCornerRadius(+e.target.value);updateObjProp('rx',+e.target.value);updateObjProp('ry',+e.target.value)}} className="w-full accent-indigo-500"/></div>
++                {activeObj?.type==='i-text'&&(
+                   <div>
+-                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Typography</p>
+-                    <div className="space-y-3">
+-                      <div>
+-                        <label className="text-xs text-gray-500 block mb-1">Font Size: {fontSize}px</label>
+-                        <input type="range" min="8" max="120" value={fontSize}
+-                          onChange={e => { setFontSize(+e.target.value); updateObjProp('fontSize',+e.target.value); }}
+-                          className="w-full accent-indigo-500" />
+-                      </div>
+-                      <div className="flex gap-2">
+-                        <button onClick={() => { const fw=fontWeight==='bold'?'normal':'bold'; setFontWeight(fw); updateObjProp('fontWeight',fw); }}
+-                          className={`flex-1 py-1.5 rounded text-xs font-bold transition-colors ${fontWeight==='bold'?'bg-accent text-white':'bg-dark-600 text-gray-300'}`}>B</button>
+-                        <button onClick={() => updateObjProp('fontStyle', activeObj.fontStyle==='italic'?'normal':'italic')}
+-                          className="flex-1 py-1.5 rounded text-xs italic transition-colors bg-dark-600 text-gray-300 hover:bg-dark-500">I</button>
+-                        <button onClick={() => updateObjProp('underline', !activeObj.underline)}
+-                          className="flex-1 py-1.5 rounded text-xs underline transition-colors bg-dark-600 text-gray-300 hover:bg-dark-500">U</button>
++                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Typography</p>
++                    <div className="space-y-2">
++                      <select value={fontFamily} onChange={e=>{setFontFamily(e.target.value);updateObjProp('fontFamily',e.target.value)}} className="w-full bg-dark-700 border border-dark-500 text-white text-xs rounded-lg px-2 py-2 focus:outline-none focus:border-accent">{FONTS.map(f=><option key={f} value={f}>{f}</option>)}</select>
++                      <div><label className="text-xs text-gray-500 mb-1 block">Size: {fontSize}px</label><input type="range" min="8" max="200" value={fontSize} onChange={e=>{setFontSize(+e.target.value);updateObjProp('fontSize',+e.target.value)}} className="w-full accent-indigo-500"/></div>
++                      <div className="flex gap-1.5">
++                        <button onClick={()=>{const fw=fontWeight==='bold'?'normal':'bold';setFontWeight(fw);updateObjProp('fontWeight',fw)}} className={`flex-1 py-1.5 rounded text-xs font-bold ${fontWeight==='bold'?'bg-accent text-white':'bg-dark-600 text-gray-300'}`}>B</button>
++                        <button onClick={()=>updateObjProp('fontStyle',activeObj.fontStyle==='italic'?'normal':'italic')} className="flex-1 py-1.5 rounded text-xs italic bg-dark-600 text-gray-300 hover:bg-dark-500">I</button>
++                        <button onClick={()=>updateObjProp('underline',!activeObj.underline)} className="flex-1 py-1.5 rounded text-xs underline bg-dark-600 text-gray-300 hover:bg-dark-500">U</button>
++                        <button onClick={()=>updateObjProp('linethrough',!activeObj.linethrough)} className="flex-1 py-1.5 rounded text-xs bg-dark-600 text-gray-300 hover:bg-dark-500 line-through">S</button>
+                       </div>
+                       <div className="flex gap-1">
+-                        {['left','center','right'].map(a => (
+-                          <button key={a} onClick={() => updateObjProp('textAlign',a)}
+-                            className={`flex-1 py-1.5 rounded text-xs transition-colors ${activeObj.textAlign===a?'bg-accent text-white':'bg-dark-600 text-gray-300'}`}>
+-                            {a==='left'?<AlignLeft size={12} className="mx-auto"/>:a==='center'?<AlignCenter size={12} className="mx-auto"/>:<AlignRight size={12} className="mx-auto"/>}
+-                          </button>
+-                        ))}
++                        {['left','center','right'].map(a=><button key={a} onClick={()=>updateObjProp('textAlign',a)} className={`flex-1 py-1.5 rounded text-xs ${activeObj.textAlign===a?'bg-accent text-white':'bg-dark-600 text-gray-300'}`}>{a==='left'?<AlignLeft size={11} className="mx-auto"/>:a==='center'?<AlignCenter size={11} className="mx-auto"/>:<AlignRight size={11} className="mx-auto"/>}</button>)}
+                       </div>
++                      <div><label className="text-xs text-gray-500 mb-1 block">Letter Spacing</label><input type="range" min="-100" max="500" value={activeObj.charSpacing||0} onChange={e=>updateObjProp('charSpacing',+e.target.value)} className="w-full accent-indigo-500"/></div>
++                      <div><label className="text-xs text-gray-500 mb-1 block">Line Height</label><input type="range" min="0.5" max="3" step="0.1" value={activeObj.lineHeight||1.2} onChange={e=>updateObjProp('lineHeight',+e.target.value)} className="w-full accent-indigo-500"/></div>
+                     </div>
+                   </div>
+                 )}
+-
+-                {activeObj && (
++                {activeObj&&<div><label className="text-xs text-gray-500 block mb-1">Opacity: {Math.round((activeObj.opacity??1)*100)}%</label><input type="range" min="0" max="100" value={Math.round((activeObj.opacity??1)*100)} onChange={e=>updateObjProp('opacity',+e.target.value/100)} className="w-full accent-indigo-500"/></div>}
++                {activeObj&&(
+                   <div>
+-                    <label className="text-xs text-gray-500 block mb-1">Opacity: {Math.round((activeObj.opacity??1)*100)}%</label>
+-                    <input type="range" min="0" max="100" value={Math.round((activeObj.opacity??1)*100)}
+-                      onChange={e => updateObjProp('opacity',+e.target.value/100)}
+-                      className="w-full accent-indigo-500" />
++                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Position</p>
++                    <div className="grid grid-cols-2 gap-2">
++                      {[{l:'X',p:'left',v:Math.round(activeObj.left||0)},{l:'Y',p:'top',v:Math.round(activeObj.top||0)},{l:'R°',p:'angle',v:Math.round(activeObj.angle||0)}].map(f=>(
++                        <div key={f.l}><label className="text-[10px] text-gray-600 block mb-0.5">{f.l}</label>
++                          <input type="number" value={f.v} onChange={e=>updateObjProp(f.p,+e.target.value)} className="w-full bg-dark-700 border border-dark-500 text-white text-xs rounded px-2 py-1.5 focus:outline-none focus:border-accent"/>
++                        </div>
++                      ))}
++                    </div>
+                   </div>
+                 )}
++                {activeObj&&(
++                  <div>
++                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Align to Canvas</p>
++                    <div className="grid grid-cols-3 gap-1">
++                      {[{l:'←',d:'left'},{l:'↔',d:'center'},{l:'→',d:'right'},{l:'↑',d:'top'},{l:'↕',d:'middle'},{l:'↓',d:'bottom'}].map(a=>(
++                        <button key={a.d} onClick={()=>alignToCanvas(a.d)} className="py-1.5 text-sm bg-dark-600 hover:bg-dark-500 rounded transition-colors text-gray-300">{a.l}</button>
++                      ))}
++                    </div>
++                  </div>
++                )}
++                <div><p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Canvas BG</p><input type="color" defaultValue="#1a1a1a" onChange={e=>{fabricRef.current.backgroundColor=e.target.value;fabricRef.current.renderAll()}} className="w-full h-9 rounded-lg cursor-pointer bg-dark-700 border border-dark-500 p-1"/></div>
++              </>
++            )}
+ 
++            {sidePanel==='effects'&&(
++              <>
++                <div>
++                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Gradients</p>
++                  <div className="grid grid-cols-3 gap-2">
++                    {GRADIENTS.map(g=><button key={g.name} onClick={()=>applyGradient(g.stops)} style={{height:36,borderRadius:8,border:'1px solid #333',cursor:'pointer',background:`linear-gradient(135deg,${g.stops[0].color},${g.stops[1].color})`}} title={g.name}/>)}
++                  </div>
++                  <p className="text-xs text-gray-600 mt-2">Select an object first</p>
++                </div>
+                 <div>
+-                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Canvas Background</p>
+-                  <input type="color" defaultValue="#1a1a1a"
+-                    onChange={e => { fabricRef.current.backgroundColor=e.target.value; fabricRef.current.renderAll(); }}
+-                    className="w-full h-9 rounded-lg cursor-pointer bg-dark-700 border border-dark-500 p-1" />
++                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Shadow</p>
++                  <button onClick={toggleShadow} className={`w-full py-2 rounded-lg text-xs font-medium transition-colors ${shadow?'bg-accent text-white':'bg-dark-600 text-gray-300 hover:bg-dark-500'}`}>{shadow?'✓ Shadow On':'Add Drop Shadow'}</button>
+                 </div>
++                {activeObj&&(
++                  <div>
++                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Blend Mode</p>
++                    <select onChange={e=>updateObjProp('globalCompositeOperation',e.target.value)} className="w-full bg-dark-700 border border-dark-500 text-white text-xs rounded-lg px-2 py-2 focus:outline-none focus:border-accent">
++                      {['source-over','multiply','screen','overlay','darken','lighten','color-dodge','color-burn','difference','exclusion'].map(m=><option key={m} value={m}>{m}</option>)}
++                    </select>
++                  </div>
++                )}
+               </>
+-            ) : (
++            )}
++
++            {sidePanel==='layers'&&(
++              <div>
++                <div className="flex items-center justify-between mb-2">
++                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Layers ({layers.length})</p>
++                </div>
++                {layers.length===0
++                  ?<p className="text-xs text-gray-600 text-center py-8">No objects yet</p>
++                  :<div className="space-y-1">
++                    {[...layers].reverse().map((obj,i)=>{
++                      const hidden=layerVis[i]; const locked=layerLocked[i];
++                      const isAct=fabricRef.current?.getActiveObject()===obj;
++                      return(
++                        <div key={`${i}-${layerTick}`}
++                          onClick={()=>{if(locked) return;fabricRef.current.setActiveObject(obj);fabricRef.current.renderAll();setActiveObj(obj)}}
++                          style={{background:isAct?'rgba(99,102,241,0.15)':'transparent',border:`1px solid ${isAct?'rgba(99,102,241,0.4)':'transparent'}`,opacity:hidden?0.4:1}}
++                          className="flex items-center gap-1.5 p-2 rounded-lg cursor-pointer transition-all text-xs hover:bg-dark-600 group"
++                        >
++                          <span className="text-gray-500 shrink-0">
++                            {obj.type==='i-text'?<Type size={10}/>:obj.type==='rect'?<Square size={10}/>:obj.type==='circle'?<Circle size={10}/>:obj.type==='triangle'?<Triangle size={10}/>:obj.type==='line'?<Minus size={10}/>:<Layers size={10}/>}
++                          </span>
++                          <span className="flex-1 truncate text-gray-300">{obj.type==='i-text'?(obj.text?.substring(0,16)||'Text'):`${obj.type} ${layers.length-i}`}</span>
++                          <div className="w-3 h-3 rounded-sm border border-dark-400 shrink-0" style={{background:typeof obj.fill==='string'?obj.fill:'#6366f1'}}/>
++                          {/* Layer controls - always visible */}
++                          <div className="flex items-center gap-0.5">
++                            <button onClick={e=>moveLayerUp(i,e)} title="Move up" className="p-0.5 text-gray-600 hover:text-white rounded"><MoveUp size={10}/></button>
++                            <button onClick={e=>moveLayerDown(i,e)} title="Move down" className="p-0.5 text-gray-600 hover:text-white rounded"><MoveDown size={10}/></button>
++                            <button onClick={e=>toggleLayerVis(i,e)} title={hidden?'Show':'Hide'} className={`p-0.5 rounded ${hidden?'text-gray-700':'text-gray-500 hover:text-white'}`}>{hidden?<EyeOff size={10}/>:<Eye size={10}/>}</button>
++                            <button onClick={e=>toggleLayerLock(i,e)} title={locked?'Unlock':'Lock'} className={`p-0.5 rounded ${locked?'text-accent':'text-gray-500 hover:text-white'}`}>{locked?<Lock size={10}/>:<Unlock size={10}/>}</button>
++                          </div>
++                        </div>
++                      );
++                    })}
++                  </div>
++                }
++              </div>
++            )}
++
++            {sidePanel==='comments'&&(
+               <div>
+-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Layers ({layers.length})</p>
+-                {layers.length === 0
+-                  ? <p className="text-xs text-gray-600 text-center py-8">No objects yet</p>
+-                  : <div className="space-y-1">
+-                    {[...layers].reverse().map((obj,i) => (
+-                      <div key={i}
+-                        onClick={() => { fabricRef.current.setActiveObject(obj); fabricRef.current.renderAll(); setActiveObj(obj); }}
+-                        className="flex items-center gap-2 p-2 rounded-lg hover:bg-dark-600 cursor-pointer transition-colors text-xs">
+-                        <span className="text-gray-500">
+-                          {obj.type==='i-text'?<Type size={12}/>:obj.type==='rect'?<Square size={12}/>:obj.type==='circle'?<Circle size={12}/>:<Layers size={12}/>}
+-                        </span>
+-                        <span className="flex-1 truncate text-gray-300">
+-                          {obj.type==='i-text'?(obj.text?.substring(0,20)||'Text'):`${obj.type} ${layers.length-i}`}
+-                        </span>
+-                        <div className="w-4 h-4 rounded border border-dark-400" style={{ backgroundColor: obj.fill||'#fff' }} />
++                <div className="flex items-center justify-between mb-3">
++                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Notes ({openComments.length} open)</p>
++                  <button onClick={()=>setCommentMode(true)} className="text-xs text-accent hover:text-accent-light">+ Add</button>
++                </div>
++                {comments.length===0
++                  ?<div className="text-center py-10 text-gray-600"><MessageSquarePlus size={28} className="mx-auto mb-2 opacity-30"/><p className="text-xs">No comments yet</p><p className="text-xs mt-1">Click 💬 toolbar button</p></div>
++                  :<div className="space-y-2">
++                    {comments.map(c=>(
++                      <div key={c.id} style={{background:c.resolved?'#0f0f0f':'rgba(99,102,241,0.06)',border:`1px solid ${c.resolved?'#1a1a1a':'rgba(99,102,241,0.2)'}`,borderRadius:10,padding:10,opacity:c.resolved?.5:1}}>
++                        <div className="flex items-center justify-between mb-1.5"><span className="text-xs font-medium text-white">{c.author}</span><span className="text-[10px] text-gray-600">{c.time}</span></div>
++                        <p className="text-xs text-gray-400 leading-relaxed mb-2">{c.text}</p>
++                        {!c.resolved&&<div className="flex gap-2">
++                          <button onClick={()=>setActiveComment(c)} className="text-xs text-accent hover:underline">View</button>
++                          <span className="text-gray-700">·</span>
++                          <button onClick={()=>resolveComment(c.id)} className="text-xs text-green-500 hover:underline">Resolve</button>
++                          <span className="text-gray-700">·</span>
++                          <button onClick={()=>deleteComment(c.id)} className="text-xs text-red-500 hover:underline">Delete</button>
++                        </div>}
++                        {c.resolved&&<p className="text-[10px] text-gray-700">✓ Resolved</p>}
+                       </div>
+                     ))}
+                   </div>
+@@ -724,5 +653,4 @@ const Editor = () => {
+     </div>
+   );
+ };
+-
+ export default Editor;
+diff --git a/frontend/src/pages/ExcelEditor.jsx b/frontend_new/src/pages/ExcelEditor.jsx
+index 4d0a19a..c7d2f7a 100644
+--- a/frontend/src/pages/ExcelEditor.jsx
++++ b/frontend_new/src/pages/ExcelEditor.jsx
+@@ -2,9 +2,8 @@ import { useState, useRef, useEffect, useCallback } from 'react';
+ import { useNavigate } from 'react-router-dom';
+ import { useAuth } from '../context/AuthContext';
+ import toast from 'react-hot-toast';
+-import { ArrowLeft, Plus, Trash2, Save, Download, Search } from 'lucide-react';
+-import { usePresence } from '../hooks/usePresence';
+-import PresenceNav from '../components/PresenceNav';
++import { ArrowLeft, Plus, Trash2, Save, Download, Search, Share2, Check } from 'lucide-react';
++import { useNotify, NotificationBell } from '../components/NotificationSystem';
+ 
+ /* ─── constants ─────────────────────────────────────────────────────────── */
+ const ROWS = 30;
+@@ -70,6 +69,8 @@ export default function ExcelEditor() {
+   const autoRef = useRef(null);
+ 
+   const [sheets,   setSheets]   = useState(loadSheets);
++  const [copied,   setCopied]   = useState(false);
++  const { notifyOpen } = useNotify();
+   const [activeId, setActiveId] = useState(null);
+   const [sel,      setSel]      = useState({ r: 0, c: 0 });
+   const [editing,  setEditing]  = useState(false);
+@@ -79,8 +80,6 @@ export default function ExcelEditor() {
+   const sheet = sheets.find(s => s.id === activeId);
+   const grid  = sheet?.grid || emptyGrid();
+ 
+-  const { presence, notifications } = usePresence(activeId ? `sheets-${activeId}` : null);
+-
+   const persist = useCallback((silent = false) => {
+     if (!activeId) return;
+     setSheets(prev => {
+@@ -144,6 +143,7 @@ export default function ExcelEditor() {
+     toast.success('Exported as CSV!');
+   };
+ 
++  const openSheet = (s) => { notifyOpen('sheets', s.name); setActiveId(s.id); };
+   const filteredSheets = sheets.filter(s => s.name.toLowerCase().includes(search.toLowerCase()));
+ 
+   return (
+@@ -155,14 +155,16 @@ export default function ExcelEditor() {
+         <div className="w-px h-6 bg-dark-600" />
+         <span className="font-bold text-sm">📊 Synapse Sheets</span>
+         <div className="flex-1" />
+-        <PresenceNav presence={presence} notifications={notifications} />
+-        <div className="w-px h-6 bg-dark-600 mx-2"/>
+         {sheet && (
+           <>
+             <button onClick={exportCSV}          className="btn-secondary text-xs px-3 py-1.5 h-8"><Download size={13}/> CSV</button>
++            <button onClick={() => { const url=`${window.location.origin}/sheets`; navigator.clipboard.writeText(url).catch(()=>{}); setCopied(true); setTimeout(()=>setCopied(false),2000); }} className="btn-secondary text-xs px-3 py-1.5 h-8" style={{color:copied?'#22c55e':undefined}}>
++              {copied?<Check size={13}/>:<Share2 size={13}/>} {copied?'Copied!':'Share'}
++            </button>
+             <button onClick={() => persist(false)} className="btn-primary text-xs px-3 py-1.5 h-8"><Save size={13}/> Save</button>
+           </>
+         )}
++        <NotificationBell />
+         <button onClick={logout} className="text-gray-500 hover:text-red-400 text-xs ml-2">Sign out</button>
+       </nav>
+ 
+@@ -185,7 +187,7 @@ export default function ExcelEditor() {
+                   <button onClick={createSheet} className="mt-2 text-accent hover:underline">Create one →</button>
+                 </div>
+               : filteredSheets.map(s => (
+-                <div key={s.id} onClick={()=>setActiveId(s.id)}
++                <div key={s.id} onClick={()=>openSheet(s)}
+                   className={`p-2.5 rounded-lg cursor-pointer mb-1 group flex items-center justify-between transition-colors ${activeId===s.id?'bg-dark-600 border border-accent/30':'hover:bg-dark-700'}`}>
+                   <span className="text-xs font-medium text-white truncate">📊 {s.name}</span>
+                   <button onClick={e=>deleteSheet(s.id,e)} className="opacity-0 group-hover:opacity-100 p-0.5 text-gray-600 hover:text-red-400">
+diff --git a/frontend/src/pages/Login.jsx b/frontend_new/src/pages/Login.jsx
+index f36a9da..2ac0266 100644
+--- a/frontend/src/pages/Login.jsx
++++ b/frontend_new/src/pages/Login.jsx
+@@ -61,7 +61,7 @@ const Login = () => {
+     try {
+       await login(form.email, form.password);
+       toast.success('Welcome back!');
+-      navigate('/dashboard');
++      navigate('/hub');
+     } catch (err) {
+       toast.error(err.response?.data?.message || 'Login failed');
+     } finally {
+diff --git a/frontend/src/pages/PptEditor.jsx b/frontend_new/src/pages/PptEditor.jsx
+index 99ff967..676d687 100644
+--- a/frontend/src/pages/PptEditor.jsx
++++ b/frontend_new/src/pages/PptEditor.jsx
+@@ -5,10 +5,9 @@ import * as fabric from 'fabric';
+ import toast from 'react-hot-toast';
+ import {
+   ArrowLeft, Plus, Trash2, Save, Download, ChevronLeft, ChevronRight,
+-  Type, Square, Circle, Minus, Play, Share2,
++  Type, Square, Circle, Minus, Play, Share2, Check,
+ } from 'lucide-react';
+-import { usePresence } from '../hooks/usePresence';
+-import PresenceNav from '../components/PresenceNav';
++import { useNotify, NotificationBell } from '../components/NotificationSystem';
+ 
+ /* ─── helpers ─────────────────────────────────────────────────────────────── */
+ const STORAGE_KEY = 'synapse_slides';
+@@ -48,9 +47,10 @@ export default function PptEditor() {
+   const [activeSlide, setActiveSlide] = useState(0);
+   const [themeIdx,   setThemeIdx]   = useState(0);
+   const [presenting, setPresenting] = useState(false);
++  const [copied,     setCopied]     = useState(false);
++  const { notifyOpen } = useNotify();
+ 
+   const theme = THEMES[themeIdx];
+-  const { presence, notifications } = usePresence(activePresId ? `ppt-${activePresId}` : null);
+ 
+   /* ── Sync pres to state ── */
+   useEffect(() => {
+@@ -62,31 +62,6 @@ export default function PptEditor() {
+     setThemeIdx(p.themeIdx || 0);
+   }, [activePresId, pres]);
+ 
+-  // Auto-join shared link via URL '?room=xyz'
+-  useEffect(() => {
+-    const searchParams = new URLSearchParams(window.location.search);
+-    const roomParam = searchParams.get('room');
+-    if (roomParam) {
+-      const existing = pres.find(p => p.id === roomParam);
+-      if (!existing) {
+-        const firstSlide = newSlide(0);
+-        const p = { id: roomParam, name: 'Shared Presentation', slides: [firstSlide], themeIdx: 0, updatedAt: Date.now() };
+-        const updated = [p, ...pres];
+-        setPres(updated);
+-        savePresent(updated);
+-        setPresName('Shared Presentation');
+-        setSlides([firstSlide]);
+-      } else {
+-        setSlides(existing.slides);
+-        setPresName(existing.name);
+-      }
+-      setActivePresId(roomParam);
+-      setActiveSlide(0);
+-      window.history.replaceState(null, '', window.location.pathname);
+-      toast.success('Joined remote presentation!');
+-    }
+-  }, [pres]);
+-
+   /* ── Init fabric when active slide changes ── */
+   useEffect(() => {
+     if (!activePresId || slides.length === 0) return;
+@@ -140,6 +115,7 @@ export default function PptEditor() {
+     savePresent(updated);
+   };
+ 
++  const openPresentation = (p) => { notifyOpen('slides', p.name); setActivePresId(p.id); };
+   const createPresentation = () => {
+     const firstSlide = newSlide(themeIdx);
+     const p = { id: Date.now().toString(), name: 'Untitled Presentation', slides: [firstSlide], themeIdx: 0, updatedAt: Date.now() };
+@@ -235,20 +211,19 @@ export default function PptEditor() {
+           : <span className="font-bold text-sm">🖥️ Synapse Slides</span>
+         }
+         <div className="flex-1"/>
+-        <PresenceNav presence={presence} notifications={notifications} />
+-        <div className="w-px h-6 bg-dark-600 mx-2"/>
+         {activePresId && (
+           <>
+-            <button onClick={() => {
+-              const link = `${window.location.origin}/slides?room=${activePresId}`;
+-              navigator.clipboard.writeText(link);
+-              toast.success('Shareable link copied to clipboard!');
+-            }} className="btn-primary text-xs px-3 py-1.5 h-8 bg-indigo-600 hover:bg-indigo-500 flex items-center gap-1"><Share2 size={13}/> Share</button>
+             <button onClick={()=>setPresenting(true)} className="btn-secondary text-xs px-3 py-1.5 h-8"><Play size={13}/> Present</button>
+             <button onClick={exportPNG}               className="btn-secondary text-xs px-3 py-1.5 h-8"><Download size={13}/> PNG</button>
+             <button onClick={()=>persistCurrent(false)} className="btn-primary text-xs px-3 py-1.5 h-8"><Save size={13}/> Save</button>
+           </>
+         )}
++        {activePresId && (
++          <button onClick={()=>{ const url=`${window.location.origin}/slides`; navigator.clipboard.writeText(url).catch(()=>{}); setCopied(true); setTimeout(()=>setCopied(false),2000); }} className="btn-secondary text-xs px-3 py-1.5 h-8" style={{color:copied?'#22c55e':undefined}}>
++            {copied?<Check size={13}/>:<Share2 size={13}/>} {copied?'Copied!':'Share'}
++          </button>
++        )}
++        <NotificationBell />
+         <button onClick={logout} className="text-gray-500 hover:text-red-400 text-xs ml-2">Sign out</button>
+       </nav>
+ 
+@@ -261,7 +236,7 @@ export default function PptEditor() {
+           </div>
+           <div className="flex-1 overflow-y-auto p-2">
+             {pres.map(p => (
+-              <div key={p.id} onClick={()=>setActivePresId(p.id)}
++              <div key={p.id} onClick={()=>openPresentation(p)}
+                 className={`p-2.5 rounded-lg cursor-pointer mb-1 group flex items-center gap-2 transition-colors ${activePresId===p.id?'bg-dark-600 border border-accent/30':'hover:bg-dark-700'}`}>
+                 <span className="text-base">🖥️</span>
+                 <span className="text-xs font-medium text-white truncate flex-1">{p.name}</span>
+diff --git a/frontend/src/pages/Register.jsx b/frontend_new/src/pages/Register.jsx
+index 22d36c0..e6f569b 100644
+--- a/frontend/src/pages/Register.jsx
++++ b/frontend_new/src/pages/Register.jsx
+@@ -58,8 +58,9 @@ const Register = () => {
+     setLoading(true);
+     try {
+       await register(form.name, form.email, form.password);
+-      toast.success('Account created! Welcome to Synapse!');
+-      navigate('/dashboard');
++      toast.success('Account created! Welcome to Synapse! 🎉');
++      localStorage.setItem('synapse_show_wizard', '1');
++      navigate('/hub');
+     } catch (err) {
+       toast.error(err.response?.data?.message || 'Registration failed');
+     } finally {
+diff --git a/frontend/src/pages/WorkspaceHub.jsx b/frontend_new/src/pages/WorkspaceHub.jsx
+index 973dd22..b7eaf7a 100644
+--- a/frontend/src/pages/WorkspaceHub.jsx
++++ b/frontend_new/src/pages/WorkspaceHub.jsx
+@@ -1,59 +1,74 @@
+ import { useNavigate } from 'react-router-dom';
+ import { useAuth } from '../context/AuthContext';
+ import { motion } from 'framer-motion';
+-import { LogOut, ArrowLeft } from 'lucide-react';
++import { LogOut } from 'lucide-react';
++import { NotificationBell } from '../components/NotificationSystem';
++
++/* ─── Workspace SVG Icons ────────────────────────────────────────────────── */
++const IconDesign = () => (
++  <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
++    <rect x="3" y="3" width="22" height="22" rx="5" fill="#6366f1" opacity="0.15"/>
++    <path d="M8 20L12 10L16 16L19 12L22 20H8Z" fill="#6366f1" opacity="0.4"/>
++    <circle cx="19" cy="9" r="3" fill="#6366f1"/>
++    <path d="M6 22H22" stroke="#6366f1" strokeWidth="1.5" strokeLinecap="round"/>
++  </svg>
++);
++
++const IconDocs = () => (
++  <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
++    <rect x="5" y="2" width="16" height="22" rx="3" fill="#3b82f6" opacity="0.15" stroke="#3b82f6" strokeWidth="1.2"/>
++    <path d="M9 9H19M9 13H19M9 17H15" stroke="#3b82f6" strokeWidth="1.5" strokeLinecap="round"/>
++    <path d="M18 2L23 7" stroke="#3b82f6" strokeWidth="1.2" strokeLinecap="round"/>
++    <path d="M18 2V7H23" fill="#3b82f6" opacity="0.2"/>
++  </svg>
++);
++
++const IconSheets = () => (
++  <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
++    <rect x="3" y="3" width="22" height="22" rx="4" fill="#22c55e" opacity="0.12" stroke="#22c55e" strokeWidth="1.2"/>
++    <line x1="3" y1="10" x2="25" y2="10" stroke="#22c55e" strokeWidth="1"/>
++    <line x1="3" y1="17" x2="25" y2="17" stroke="#22c55e" strokeWidth="1"/>
++    <line x1="11" y1="3" x2="11" y2="25" stroke="#22c55e" strokeWidth="1"/>
++    <line x1="19" y1="3" x2="19" y2="25" stroke="#22c55e" strokeWidth="1"/>
++    <rect x="11" y="10" width="8" height="7" fill="#22c55e" opacity="0.25"/>
++  </svg>
++);
++
++const IconSlides = () => (
++  <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
++    <rect x="3" y="6" width="22" height="16" rx="3" fill="#f97316" opacity="0.15" stroke="#f97316" strokeWidth="1.2"/>
++    <rect x="7" y="9" width="14" height="8" rx="1.5" fill="#f97316" opacity="0.25"/>
++    <path d="M11 23H17" stroke="#f97316" strokeWidth="1.5" strokeLinecap="round"/>
++    <path d="M14 21V23" stroke="#f97316" strokeWidth="1.5" strokeLinecap="round"/>
++    <circle cx="14" cy="13" r="2.5" fill="#f97316" opacity="0.6"/>
++    <path d="M12.5 13L16.5 13M14 11.5L14 14.5" stroke="#f97316" strokeWidth="1"/>
++  </svg>
++);
++
++const IconCode = () => (
++  <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
++    <rect x="3" y="4" width="22" height="20" rx="4" fill="#ec4899" opacity="0.12" stroke="#ec4899" strokeWidth="1.2"/>
++    <circle cx="8" cy="9" r="1.2" fill="#ef4444"/>
++    <circle cx="12" cy="9" r="1.2" fill="#f97316"/>
++    <circle cx="16" cy="9" r="1.2" fill="#22c55e"/>
++    <line x1="5" y1="12" x2="23" y2="12" stroke="#ec4899" strokeWidth="0.8" opacity="0.4"/>
++    <path d="M9 17L7 15L9 13" stroke="#ec4899" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
++    <path d="M13 17L15 15L13 13" stroke="#ec4899" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
++    <path d="M10.5 18L12.5 12" stroke="#ec4899" strokeWidth="1.2" strokeLinecap="round" opacity="0.7"/>
++  </svg>
++);
+ 
+ const WORKSPACES = [
+-  {
+-    id: 'design',
+-    title: 'Design Studio',
+-    desc: 'Vector canvas, shapes, text, layers and one-click export.',
+-    icon: '🎨',
+-    color: '#6366f1',
+-    href: '/dashboard',
+-    tags: ['Canvas', 'Export', 'Layers'],
+-  },
+-  {
+-    id: 'docs',
+-    title: 'Docs',
+-    desc: 'Rich-text document editor with formatting, headings and export.',
+-    icon: '📝',
+-    color: '#3b82f6',
+-    href: '/docs',
+-    tags: ['Rich Text', 'Headings', 'Export'],
+-  },
+-  {
+-    id: 'excel',
+-    title: 'Sheets',
+-    desc: 'Spreadsheet editor with cells, formulas and data formatting.',
+-    icon: '📊',
+-    color: '#22c55e',
+-    href: '/sheets',
+-    tags: ['Cells', 'Formulas', 'CSV Export'],
+-  },
+-  {
+-    id: 'ppt',
+-    title: 'Slides',
+-    desc: 'Presentation builder with multiple slides, themes and shapes.',
+-    icon: '🖥️',
+-    color: '#f97316',
+-    href: '/slides',
+-    tags: ['Slides', 'Themes', 'Present'],
+-  },
+-  {
+-    id: 'code',
+-    title: 'Code Space',
+-    desc: 'Code editor with syntax highlighting, multiple languages and live run.',
+-    icon: '💻',
+-    color: '#ec4899',
+-    href: '/code',
+-    tags: ['Multi-lang', 'Run JS', 'Export'],
+-  },
++  { id: 'design', title: 'Design Studio', desc: 'Vector canvas with shapes, text, layers and one-click export to PNG, PDF, DOC, ZIP.', Icon: IconDesign, color: '#6366f1', href: '/dashboard', tags: ['Canvas', 'Layers', 'Export'] },
++  { id: 'docs',   title: 'Docs',          desc: 'Rich-text document editor with formatting toolbar, word count, and DOC/TXT export.', Icon: IconDocs,   color: '#3b82f6', href: '/docs',      tags: ['Rich Text', 'Headings', 'Export'] },
++  { id: 'sheets', title: 'Sheets',        desc: 'Spreadsheet editor with cells, SUM/AVG formulas, and CSV export.',                   Icon: IconSheets, color: '#22c55e', href: '/sheets',    tags: ['Cells', 'Formulas', 'CSV'] },
++  { id: 'slides', title: 'Slides',        desc: 'Presentation builder with slide strip, themes, shapes, present mode and PNG export.', Icon: IconSlides, color: '#f97316', href: '/slides',    tags: ['Slides', 'Present', 'Themes'] },
++  { id: 'code',   title: 'Code Space',    desc: 'Code editor with syntax highlight for 8 languages, JS runner and file download.',    Icon: IconCode,   color: '#ec4899', href: '/code',      tags: ['8 Languages', 'Run JS', 'Download'] },
+ ];
+ 
+ const card = {
+-  initial: { opacity: 0, y: 24, scale: 0.97 },
+-  animate: (i) => ({ opacity: 1, y: 0, scale: 1, transition: { delay: i * 0.07, duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] } }),
++  initial: { opacity: 0, y: 28, scale: 0.96 },
++  animate: (i) => ({ opacity: 1, y: 0, scale: 1, transition: { delay: 0.08 + i * 0.07, duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] } }),
+ };
+ 
+ export default function WorkspaceHub() {
+@@ -62,45 +77,68 @@ export default function WorkspaceHub() {
+ 
+   return (
+     <div className="min-h-screen bg-dark-900" style={{ position: 'relative', overflow: 'hidden' }}>
+-      {/* Background glow */}
+-      <div style={{ position:'fixed', top:'-20%', left:'30%', width:600, height:600, background:'radial-gradient(circle, rgba(99,102,241,0.06) 0%, transparent 70%)', pointerEvents:'none' }} />
++      {/* Background ambient */}
++      <div style={{ position:'fixed', top:'-15%', left:'20%', width:700, height:700, background:'radial-gradient(circle, rgba(99,102,241,0.05) 0%, transparent 70%)', pointerEvents:'none', zIndex:0 }} />
++      <div style={{ position:'fixed', bottom:'-10%', right:'10%', width:400, height:400, background:'radial-gradient(circle, rgba(236,72,153,0.04) 0%, transparent 70%)', pointerEvents:'none', zIndex:0 }} />
+ 
+       {/* Nav */}
+-      <nav className="bg-dark-800 border-b border-dark-600 px-6 py-3 flex items-center justify-between sticky top-0 z-50">
+-        <div className="flex items-center gap-3">
+-          <button onClick={() => navigate('/dashboard')} className="tool-btn w-8 h-8"><ArrowLeft size={16} /></button>
+-          <span className="font-bold text-lg tracking-tight">Synapse Workspaces</span>
+-        </div>
+-        <div className="flex items-center gap-3">
++      <nav className="bg-dark-800 border-b border-dark-600 px-6 py-3 flex items-center justify-between sticky top-0 z-50" style={{ backdropFilter:'blur(20px)' }}>
++        {/* Logo */}
++        <motion.div
++          className="flex items-center gap-3"
++          initial={{ opacity: 0, x: -16 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.4 }}
++        >
++          <div style={{ width:34, height:34, borderRadius:10, background:'linear-gradient(135deg,#6366f1,#8b5cf6)', display:'flex', alignItems:'center', justifyContent:'center' }}>
++            <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
++              <circle cx="9" cy="9" r="3" fill="#fff"/>
++              <circle cx="9" cy="3" r="1.5" fill="#fff" opacity="0.6"/>
++              <circle cx="9" cy="15" r="1.5" fill="#fff" opacity="0.6"/>
++              <circle cx="3" cy="9" r="1.5" fill="#fff" opacity="0.6"/>
++              <circle cx="15" cy="9" r="1.5" fill="#fff" opacity="0.6"/>
++            </svg>
++          </div>
++          <span className="font-bold text-lg tracking-tight">Synapse</span>
++        </motion.div>
++
++        {/* User + actions */}
++        <motion.div
++          className="flex items-center gap-3"
++          initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.4 }}
++        >
++          <NotificationBell />
+           <div className="flex items-center gap-2 bg-dark-700 px-3 py-2 rounded-lg">
+-            <div className="w-6 h-6 bg-accent rounded-full flex items-center justify-center text-xs font-bold">
++            <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white" style={{ background: 'linear-gradient(135deg,#6366f1,#8b5cf6)' }}>
+               {user?.name?.[0]?.toUpperCase()}
+             </div>
+-            <span className="text-sm font-medium">{user?.name}</span>
++            <div>
++              <p className="text-sm font-medium leading-none">{user?.name}</p>
++              <p className="text-xs text-gray-500 mt-0.5">{user?.email}</p>
++            </div>
+           </div>
+           <button onClick={logout} className="btn-secondary text-sm px-3 py-2 text-red-400 hover:text-red-300">
+-            <LogOut size={16} /> Sign out
++            <LogOut size={15} /> Sign out
+           </button>
+-        </div>
++        </motion.div>
+       </nav>
+ 
+-      <div className="max-w-5xl mx-auto px-6 py-16">
++      <div className="max-w-5xl mx-auto px-6 py-14" style={{ position:'relative', zIndex:1 }}>
++
+         {/* Header */}
+         <motion.div
+-          initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+-          className="text-center mb-14"
++          initial={{ opacity:0, y:20 }} animate={{ opacity:1, y:0 }} transition={{ duration:0.5 }}
++          className="mb-14"
+         >
+-          <p className="text-xs font-semibold tracking-widest text-accent uppercase mb-3">All Workspaces</p>
+-          <h1 className="text-4xl font-bold text-white mb-4" style={{ letterSpacing: '-1px' }}>
++          <p className="text-xs font-semibold tracking-widest text-accent uppercase mb-3">Welcome back, {user?.name?.split(' ')[0]} 👋</p>
++          <h1 className="text-4xl font-bold text-white mb-4" style={{ letterSpacing:'-1.5px' }}>
+             Choose your workspace
+           </h1>
+-          <p className="text-gray-400 text-lg max-w-md mx-auto">
+-            Each workspace is purpose-built. Pick the right tool for the job.
++          <p className="text-gray-500 text-base max-w-lg">
++            Each tool is purpose-built for its job. Create, write, compute, present, or code — all in one platform.
+           </p>
+         </motion.div>
+ 
+-        {/* Cards grid */}
+-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 20 }}>
++        {/* Workspace grid */}
++        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(290px, 1fr))', gap:18 }}>
+           {WORKSPACES.map((ws, i) => (
+             <motion.div
+               key={ws.id}
+@@ -109,48 +147,54 @@ export default function WorkspaceHub() {
+               initial="initial"
+               animate="animate"
+               onClick={() => navigate(ws.href)}
+-              whileHover={{ scale: 1.02, boxShadow: `0 0 32px ${ws.color}22` }}
++              whileHover={{ scale: 1.025, y: -3 }}
+               whileTap={{ scale: 0.98 }}
+               style={{
+-                background: '#111', border: '1px solid #222', borderRadius: 18,
+-                padding: 28, cursor: 'pointer', transition: 'border-color .2s',
+-                position: 'relative', overflow: 'hidden',
++                background:'#0f0f0f', border:'1px solid #1e1e1e', borderRadius:20,
++                padding:28, cursor:'pointer', position:'relative', overflow:'hidden',
++                transition:'border-color .2s, box-shadow .2s',
+               }}
+-              onMouseEnter={e => e.currentTarget.style.borderColor = ws.color + '66'}
+-              onMouseLeave={e => e.currentTarget.style.borderColor = '#222'}
++              onMouseEnter={e => { e.currentTarget.style.borderColor = ws.color + '55'; e.currentTarget.style.boxShadow = `0 8px 32px ${ws.color}18`; }}
++              onMouseLeave={e => { e.currentTarget.style.borderColor = '#1e1e1e'; e.currentTarget.style.boxShadow = 'none'; }}
+             >
+-              {/* Subtle glow blob */}
+-              <div style={{ position:'absolute', top:-40, right:-40, width:120, height:120, background:`radial-gradient(circle, ${ws.color}18 0%, transparent 70%)`, pointerEvents:'none' }} />
+-
+-              {/* Icon */}
+-              <div style={{
+-                width: 56, height: 56, borderRadius: 14,
+-                background: ws.color + '18', border: `1px solid ${ws.color}33`,
+-                display: 'flex', alignItems: 'center', justifyContent: 'center',
+-                fontSize: 26, marginBottom: 18,
+-              }}>
+-                {ws.icon}
++              {/* Glow blob top-right */}
++              <div style={{ position:'absolute', top:-30, right:-30, width:100, height:100, borderRadius:'50%', background:`radial-gradient(circle, ${ws.color}20 0%, transparent 70%)`, pointerEvents:'none' }} />
++
++              {/* Icon box */}
++              <div style={{ width:56, height:56, borderRadius:16, background:ws.color+'16', border:`1px solid ${ws.color}30`, display:'flex', alignItems:'center', justifyContent:'center', marginBottom:20 }}>
++                <ws.Icon />
+               </div>
+ 
+-              <h3 style={{ fontSize: 18, fontWeight: 700, color: '#fff', marginBottom: 8 }}>{ws.title}</h3>
+-              <p style={{ fontSize: 13, color: '#666', lineHeight: 1.6, marginBottom: 16 }}>{ws.desc}</p>
++              <h3 style={{ fontSize:18, fontWeight:700, color:'#fff', marginBottom:8, letterSpacing:'-0.3px' }}>{ws.title}</h3>
++              <p style={{ fontSize:13, color:'#666', lineHeight:1.65, marginBottom:18 }}>{ws.desc}</p>
+ 
+               {/* Tags */}
+-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
++              <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginBottom:20 }}>
+                 {ws.tags.map(tag => (
+-                  <span key={tag} style={{
+-                    fontSize: 11, padding: '3px 8px', borderRadius: 6,
+-                    background: ws.color + '14', color: ws.color,
+-                    border: `1px solid ${ws.color}33`,
+-                  }}>{tag}</span>
++                  <span key={tag} style={{ fontSize:11, padding:'3px 9px', borderRadius:6, background:ws.color+'14', color:ws.color, border:`1px solid ${ws.color}30` }}>
++                    {tag}
++                  </span>
+                 ))}
+               </div>
+ 
+-              {/* Open arrow */}
+-              <div style={{ position:'absolute', bottom: 24, right: 24, color: ws.color, opacity: 0.6, fontSize: 20 }}>→</div>
++              {/* Open button */}
++              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
++                <span style={{ fontSize:12, color:'#444' }}>Click to open</span>
++                <div style={{ width:32, height:32, borderRadius:10, background:ws.color+'18', border:`1px solid ${ws.color}30`, display:'flex', alignItems:'center', justifyContent:'center', color:ws.color, fontSize:16 }}>
++                  →
++                </div>
++              </div>
+             </motion.div>
+           ))}
+         </div>
++
++        {/* Footer */}
++        <motion.p
++          initial={{ opacity:0 }} animate={{ opacity:1 }} transition={{ delay:0.6 }}
++          style={{ textAlign:'center', color:'#2a2a2a', fontSize:12, marginTop:48 }}
++        >
++          Synapse · Made with ❤️ in India 🇮🇳
++        </motion.p>
+       </div>
+     </div>
+   );
+diff --git a/frontend/package.json b/frontend_new/package.json
+index 56c5f1e..8dd673e 100644
+--- a/frontend/package.json
++++ b/frontend_new/package.json
+@@ -4,28 +4,19 @@
+   "version": "0.0.0",
+   "type": "module",
+   "scripts": {
+-    "dev": "vite --host",
++    "dev": "vite",
+     "build": "vite build",
+     "lint": "eslint .",
+     "preview": "vite preview"
+   },
+   "dependencies": {
+-    "@hocuspocus/provider": "^3.4.4",
+-    "@tiptap/extension-collaboration": "^2.11.0",
+-    "@tiptap/extension-collaboration-cursor": "^2.11.0",
+-    "@tiptap/react": "^2.11.0",
+-    "@tiptap/starter-kit": "^2.11.0",
+     "axios": "^1.13.6",
+     "fabric": "^7.2.0",
+-    "framer-motion": "^11.18.2",
+     "lucide-react": "^0.577.0",
+     "react": "^19.2.4",
+     "react-dom": "^19.2.4",
+     "react-hot-toast": "^2.6.0",
+     "react-router-dom": "^7.13.1",
+-    "y-prosemirror": "^1.3.7",
+-    "y-websocket": "^3.0.0",
+-    "yjs": "^13.6.30",
+     "zustand": "^5.0.12"
+   },
+   "devDependencies": {
